@@ -202,23 +202,29 @@
             </div>
           </div>
 
-          <!-- VISTA 2: REGISTRO DE NOTAS -->
+          <!-- VISTA 2: REGISTRO DE NOTAS (ACTA POR GRADO Y CURSO) -->
           <div id="view-notas" hidden>
             <div class="card">
               <div class="card-head">
                 <div>
-                  <h2>Registrar Nueva Calificación (Escala 0–20)</h2>
-                  <p>Al guardar en PostgreSQL, SIGE-360 recalcula al instante el índice de riesgo y el semáforo IoT</p>
+                  <h2>Registro Auxiliar de Calificaciones por Grado y Curso</h2>
+                  <p>Selecciona el grado, curso y bimestre para calificar al aula completa. Al guardar, se recalcula el semáforo predictivo en PostgreSQL.</p>
                 </div>
               </div>
-              <form id="form-nota" class="form-grid">
+              <div class="form-grid" style="margin-bottom:14px;">
                 <div class="field">
-                  <label for="nota-alumno">Estudiante</label>
-                  <select id="nota-alumno" required></select>
+                  <label for="acta-grado">Grado Académico</label>
+                  <select id="acta-grado">
+                    <option value="1ro Secundaria">1ro Secundaria</option>
+                    <option value="2do Secundaria">2do Secundaria</option>
+                    <option value="3ro Secundaria" selected>3ro Secundaria</option>
+                    <option value="4to Secundaria">4to Secundaria</option>
+                    <option value="5to Secundaria">5to Secundaria</option>
+                  </select>
                 </div>
                 <div class="field">
-                  <label for="nota-curso">Curso</label>
-                  <select id="nota-curso" required>
+                  <label for="acta-curso">Curso</label>
+                  <select id="acta-curso">
                     <option value="Matemática">Matemática</option>
                     <option value="Comunicación">Comunicación</option>
                     <option value="Ciencia y Tecnología">Ciencia y Tecnología</option>
@@ -228,28 +234,59 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label for="nota-bimestre">Bimestre</label>
-                  <select id="nota-bimestre" required>
+                  <label for="acta-bimestre">Bimestre</label>
+                  <select id="acta-bimestre">
                     <option value="1">Bimestre 1</option>
                     <option value="2">Bimestre 2</option>
                     <option value="3">Bimestre 3</option>
                     <option value="4" selected>Bimestre 4</option>
                   </select>
                 </div>
-                <div class="field">
-                  <label for="nota-valor">Nota (0–20)</label>
-                  <input id="nota-valor" type="number" min="0" max="20" step="0.5" value="14" required>
-                </div>
-                <button type="submit" class="btn btn-primary">Guardar Nota</button>
-              </form>
+                <button id="btn-guardar-acta" type="button" class="btn btn-primary">Guardar Acta del Curso</button>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th>Estudiante</th>
+                      <th>Sección</th>
+                      <th>Prom. Actual</th>
+                      <th>Riesgo Actual</th>
+                      <th>Nota del Curso (0–20)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tabla-acta-grado"></tbody>
+                </table>
+              </div>
               <div id="toast-nota" class="toast-ok" hidden></div>
             </div>
 
             <div class="card">
               <div class="card-head">
                 <div>
-                  <h2>Calificaciones Recientes en PostgreSQL</h2>
-                  <p>Últimas notas registradas en la institución</p>
+                  <h2>Historial de Calificaciones Registradas</h2>
+                  <p>Filtrado en vivo desde PostgreSQL</p>
+                </div>
+                <div class="toolbar">
+                  <select id="filtro-notas-grado" class="search-input" style="width:165px;">
+                    <option value="TODOS">Todos los grados</option>
+                    <option value="1ro Secundaria">1ro Secundaria</option>
+                    <option value="2do Secundaria">2do Secundaria</option>
+                    <option value="3ro Secundaria">3ro Secundaria</option>
+                    <option value="4to Secundaria">4to Secundaria</option>
+                    <option value="5to Secundaria">5to Secundaria</option>
+                  </select>
+                  <select id="filtro-notas-curso" class="search-input" style="width:165px;">
+                    <option value="TODOS">Todos los cursos</option>
+                    <option value="Matemática">Matemática</option>
+                    <option value="Comunicación">Comunicación</option>
+                    <option value="Ciencia y Tecnología">Ciencia y Tecnología</option>
+                    <option value="Historia y Geografía">Historia y Geografía</option>
+                    <option value="Inglés">Inglés</option>
+                    <option value="Física">Física</option>
+                  </select>
                 </div>
               </div>
               <div class="table-wrap">

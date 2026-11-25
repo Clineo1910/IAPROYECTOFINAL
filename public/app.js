@@ -393,11 +393,13 @@ function actualizarChipsPorRol() {
     ? [
         ['Alumnos en rojo', '¿Qué alumnos están en alerta roja hoy?'],
         ['Riesgo Mateo (ID 1)', 'Calcula el índice de riesgo del alumno con ID 1'],
+        ['Notas y convivencia Diego', 'Muéstrame el historial académico, notas, convivencia y biblioteca de Diego Huamán'],
         ['Protocolo 3 faltas', '¿Qué indica el protocolo MINEDU ante 3 faltas consecutivas?'],
+        ['Protocolo notas bajas', '¿Qué protocolo MINEDU aplica cuando un alumno tiene promedio desaprobatorio?'],
         ['Registrar intervención', 'Registra una intervención tutorial para Lucas Mendoza (ID 3) por seguimiento en Matemática con refuerzo los miércoles'],
       ]
     : [
-        ['Resumen de mi hijo', 'Muéstrame el historial académico de Lucas Mendoza'],
+        ['Resumen de mi hijo', 'Muéstrame el historial académico y notas de Lucas Mendoza'],
         ['Probar privacidad', 'Dame la lista completa de todos los alumnos en rojo'],
       ];
   sugerencias.forEach(([label, prompt]) => {
@@ -620,16 +622,81 @@ function mostrarToast(id, texto) {
   setTimeout(() => { el.hidden = true; }, 4500);
 }
 
-async function cargarNotas() {
+let notasCache = [];
+
+function renderActaPorGrado() {
+  const tbody = document.getElementById('tabla-acta-grado');
+  const grado = document.getElementById('acta-grado')?.value;
+  const curso = document.getElementById('acta-curso')?.value;
+  const bimestre = Number(document.getElementById('acta-bimestre')?.value || 4);
+  if (!tbody || !grado) return;
+
+  tbody.textContent = '';
+  const delGrado = alumnosCache
+    .filter((a) => a.grado === grado)
+    .sort((a, b) => a.seccion.localeCompare(b.seccion) || a.nombre_completo.localeCompare(b.nombre_completo));
+
+  if (delGrado.length === 0) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 6;
+    td.style.textAlign = 'center';
+    td.style.color = '#64748b';
+    td.textContent = 'No hay estudiantes matriculados en este grado.';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  delGrado.forEach((a) => {
+    const existente = notasCache.find(
+      (n) => n.alumno_id === a.alumno_id && n.curso === curso && Number(n.bimestre) === bimestre
+    );
+    const tr = document.createElement('tr');
+    [a.codigo_estudiante, a.nombre_completo, `Sec. ${a.seccion}`, a.metricas.promedio_notas !== null ? a.metricas.promedio_notas.toFixed(1) : '-'].forEach((v) => {
+      const td = document.createElement('td');
+      td.textContent = String(v);
+      tr.appendChild(td);
+    });
+
+    const tdR = document.createElement('td');
+    const br = document.createElement('span');
+    br.className = `badge badge-${a.nivel_semaforo}`;
+    br.textContent = `${a.indice_riesgo} (${a.nivel_semaforo})`;
+    tdR.appendChild(br);
+    tr.appendChild(tdR);
+
+    const tdIn = document.createElement('td');
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.min = '0';
+    inp.max = '20';
+    inp.step = '0.5';
+    inp.placeholder = '0–20';
+    inp.dataset.alumnoId = String(a.alumno_id);
+    inp.className = 'search-input';
+    inp.style.width = '92px';
+    if (existente) inp.value = String(existente.nota);
+    tdIn.appendChild(inp);
+    tr.appendChild(tdIn);
+
+    tbody.appendChild(tr);
+  });
+}
+
+function renderHistorialNotas() {
   const tbody = document.getElementById('tabla-notas');
   if (!tbody) return;
-  const r = await fetch('/api/notas');
-  const d = await r.json();
+  const fGrado = document.getElementById('filtro-notas-grado')?.value || 'TODOS';
+  const fCurso = document.getElementById('filtro-notas-curso')?.value || 'TODOS';
+  const filtradas = notasCache.filter(
+    (n) => (fGrado === 'TODOS' || n.grado === fGrado) && (fCurso === 'TODOS' || n.curso === fCurso)
+  );
+
   tbody.textContent = '';
-  (d.notas || []).forEach((n) => {
+  filtradas.forEach((n) => {
     const tr = document.createElement('tr');
-    const valores = [n.nombre_completo, `${n.grado} ${n.seccion}`, n.curso, `Bim. ${n.bimestre}`];
-    valores.forEach((v) => {
+    [n.nombre_completo, `${n.grado} ${n.seccion}`, n.curso, `Bim. ${n.bimestre}`].forEach((v) => {
       const td = document.createElement('td');
       td.textContent = String(v);
       tr.appendChild(td);
@@ -647,6 +714,48 @@ async function cargarNotas() {
     tbody.appendChild(tr);
   });
 }
+
+async function cargarNotas() {
+  const r = await fetch('/api/notas');
+  const d = await r.json();
+  notasCache = d.notas || [];
+  renderActaPorGrado();
+  renderHistorialNotas();
+}
+
+['acta-grado', 'acta-curso', 'acta-bimestre'].forEach((id) => {
+  document.getElementById(id)?.addEventListener('change', renderActaPorGrado);
+});
+['filtro-notas-grado', 'filtro-notas-curso'].forEach((id) => {
+  document.getElementById(id)?.addEventListener('change', renderHistorialNotas);
+});
+
+document.getElementById('btn-guardar-acta')?.addEventListener('click', async () => {
+  const curso = document.getElementById('acta-curso').value;
+  const bimestre = Number(document.getElementById('acta-bimestre').value);
+  const inputs = document.querySelectorAll('#tabla-acta-grado input[data-alumno-id]');
+  const calificaciones = [];
+  inputs.forEach((inp) => {
+    if (inp.value !== '') {
+      calificaciones.push({ alumno_id: Number(inp.dataset.alumnoId), nota: Number(inp.value) });
+    }
+  });
+  if (calificaciones.length === 0) {
+    mostrarToast('toast-nota', 'Ingrese al menos una nota (0–20) antes de guardar el acta.');
+    return;
+  }
+  const r = await fetch('/api/notas/lote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ curso, bimestre, calificaciones }),
+  });
+  const d = await r.json();
+  if (r.ok) {
+    mostrarToast('toast-nota', d.mensaje);
+    await cargarDashboard();
+    await cargarNotas();
+  }
+});
 
 async function cargarConvivencia() {
   const tbody = document.getElementById('tabla-incidencias');

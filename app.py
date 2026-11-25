@@ -156,6 +156,17 @@ class NotaEntrada(BaseModel):
     nota: float
 
 
+class NotaLoteItem(BaseModel):
+    alumno_id: int
+    nota: float
+
+
+class NotaLoteEntrada(BaseModel):
+    curso: str
+    bimestre: int
+    calificaciones: list[NotaLoteItem]
+
+
 class IncidenciaEntrada(BaseModel):
     alumno_id: int
     tipo: str
@@ -252,6 +263,40 @@ def api_crear_nota(entrada: NotaEntrada):
     except Exception as exc:
         print('[APP] Error registrando nota:', exc)
         return JSONResponse({'error': 'No se pudo registrar la nota'}, status_code=500)
+
+
+@app.post('/api/notas/lote')
+def api_crear_notas_lote(entrada: NotaLoteEntrada):
+    if entrada.bimestre not in (1, 2, 3, 4) or not entrada.calificaciones:
+        return JSONResponse({'error': 'Bimestre o lista de calificaciones inválidos.'}, status_code=400)
+    try:
+        hoy = datetime.now().strftime('%Y-%m-%d')
+        curso = entrada.curso.strip()
+        guardadas = 0
+        with obtener_conexion() as conn:
+            with conn.cursor() as cur:
+                for item in entrada.calificaciones:
+                    if item.nota < 0 or item.nota > 20:
+                        continue
+                    cur.execute(
+                        """DELETE FROM notas WHERE alumno_id = %s AND curso = %s AND bimestre = %s""",
+                        (item.alumno_id, curso, entrada.bimestre),
+                    )
+                    cur.execute(
+                        """INSERT INTO notas (alumno_id, curso, bimestre, nota, fecha_registro)
+                           VALUES (%s, %s, %s, %s, %s)""",
+                        (item.alumno_id, curso, entrada.bimestre, round(item.nota, 2), hoy),
+                    )
+                    guardadas += 1
+            conn.commit()
+        return {
+            'ok': True,
+            'guardadas': guardadas,
+            'mensaje': f'Acta guardada: {guardadas} calificaciones de {curso} (Bimestre {entrada.bimestre}) actualizadas en PostgreSQL.',
+        }
+    except Exception as exc:
+        print('[APP] Error guardando acta por lote:', exc)
+        return JSONResponse({'error': 'No se pudo guardar el acta de calificaciones'}, status_code=500)
 
 
 @app.get('/api/convivencia')
