@@ -57,7 +57,7 @@ window.SIGE = {
       btnTg.type = 'button';
       btnTg.className = 'btn btn-secondary btn-xs';
       btnTg.textContent = '✈ Enviar alerta por Telegram al apoderado';
-      btnTg.addEventListener('click', () => window.SIGE.enviarTelegram(body.textContent, 3));
+      btnTg.addEventListener('click', () => window.SIGE.enviarTelegram(body.textContent, null));
       actions.appendChild(btnTg);
       wrap.appendChild(actions);
     }
@@ -92,7 +92,7 @@ window.SIGE = {
       btnTg.type = 'button';
       btnTg.className = 'btn btn-secondary btn-xs';
       btnTg.textContent = '✈ Enviar por Telegram al apoderado';
-      btnTg.addEventListener('click', () => window.SIGE.enviarTelegram(d.respuesta, 3));
+      btnTg.addEventListener('click', () => window.SIGE.enviarTelegram(d.respuesta, null));
       actions.appendChild(btnTg);
       wrap.appendChild(actions);
 

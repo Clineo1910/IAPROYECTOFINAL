@@ -778,11 +778,23 @@ def api_enviar_telegram(entrada: AlertaTelegramEntrada, request: Request):
     chat_id_destino = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
     origen_destino = 'chat demo (.env)'
 
+    # Si no vino alumno_id explícito (ej. desde el botón del chat), detectar qué estudiante menciona el mensaje
+    alumno_id_resuelto = entrada.alumno_id
+    if not alumno_id_resuelto:
+        todos_al = consultar("SELECT id, codigo_estudiante, nombre_completo FROM alumnos")
+        texto_low = texto.lower()
+        for al in todos_al:
+            partes = al['nombre_completo'].lower().split()
+            nombre_corto = ' '.join(partes[:2]) if len(partes) >= 2 else al['nombre_completo'].lower()
+            if al['codigo_estudiante'].lower() in texto_low or nombre_corto in texto_low:
+                alumno_id_resuelto = al['id']
+                break
+
     # Si el alumno tiene su propio apoderado vinculado en PostgreSQL, usar ese chat_id
-    if entrada.alumno_id:
+    if alumno_id_resuelto:
         filas_tg = consultar(
             "SELECT nombre_completo, telegram_chat_id FROM alumnos WHERE id = %s LIMIT 1",
-            (entrada.alumno_id,),
+            (alumno_id_resuelto,),
         )
         if filas_tg and filas_tg[0].get('telegram_chat_id'):
             chat_id_destino = str(filas_tg[0]['telegram_chat_id']).strip()
@@ -811,7 +823,7 @@ def api_enviar_telegram(entrada: AlertaTelegramEntrada, request: Request):
                 cur.execute(
                     """INSERT INTO alertas_enviadas (alumno_id, canal, mensaje, enviado_externo, detalle_estado)
                        VALUES (%s, 'TELEGRAM', %s, %s, %s)""",
-                    (entrada.alumno_id, texto[:1500], enviado_externo, detalle),
+                    (alumno_id_resuelto, texto[:1500], enviado_externo, detalle),
                 )
             conn.commit()
     except Exception as exc:
