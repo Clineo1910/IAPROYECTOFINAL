@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGE-360 | Iniciar Sesión</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .login-body {
+      min-height: 100vh;
+      background: radial-gradient(circle at 15% 20%, #1e3a8a 0%, #0b1220 55%, #060a14 100%);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .login-shell {
+      width: 100%;
+      max-width: 920px;
+      display: grid;
+      grid-template-columns: 1.05fr 1fr;
+      background: #fff;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 28px 60px rgba(0, 0, 0, 0.45);
+    }
+    @media (max-width: 780px) { .login-shell { grid-template-columns: 1fr; } }
+    .login-hero {
+      background: linear-gradient(155deg, #0f172a 0%, #1d4ed8 100%);
+      color: #fff;
+      padding: 36px 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .login-hero h1 { margin: 18px 0 10px; font-size: 1.75rem; line-height: 1.2; }
+    .login-hero p { margin: 0; color: #dbeafe; font-size: 0.9rem; line-height: 1.55; }
+    .hero-list { margin: 22px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 0.84rem; color: #e2e8f0; }
+    .login-form-pane { padding: 36px 32px; display: flex; flex-direction: column; justify-content: center; }
+    .login-form-pane h2 { margin: 0 0 6px; font-size: 1.35rem; }
+    .login-form-pane > p { margin: 0 0 22px; color: var(--muted); font-size: 0.86rem; }
+    .login-form { display: flex; flex-direction: column; gap: 14px; }
+    .demo-accounts {
+      margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .demo-accounts small { color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.7rem; }
+    .demo-btn {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--surface-subtle); cursor: pointer; text-align: left;
+      transition: all 0.15s;
+    }
+    .demo-btn:hover { border-color: var(--primary); background: var(--primary-soft); }
+    .demo-btn strong { display: block; font-size: 0.84rem; color: var(--text); }
+    .demo-btn span { font-size: 0.74rem; color: var(--muted); }
+    .login-error {
+      background: var(--rojo-soft); color: var(--rojo); border: 1px solid var(--rojo-border);
+      padding: 9px 12px; border-radius: 9px; font-size: 0.82rem; font-weight: 600;
+    }
+  </style>
+</head>
+<body class="login-body">
+  <div class="login-shell">
+    <section class="login-hero">
+      <div>
+        <div class="brand-logo" style="width:48px;height:48px;font-size:1.1rem;">360</div>
+        <h1>SIGE-360</h1>
+        <p>Sistema de Inteligencia Escolar Predictiva con control de acceso por rol, PostgreSQL, MCP y agente conversacional IA.</p>
+        <ul class="hero-list">
+          <li>✓ <strong>Portal Docente / Tutor:</strong> semáforo predictivo, libreta ponderada, convivencia, intervenciones y SIGE-Bot completo.</li>
+          <li>✓ <strong>Portal de Padres:</strong> boleta de notas, asistencia RFID y SIGE-Bot privado (solo lectura de su hijo, Ley N.° 29733).</li>
+          <li>✓ <strong>Pantalla IoT:</strong> semáforo en tiempo real para Sala de Profesores.</li>
+        </ul>
+      </div>
+      <small style="color:#bfdbfe;opacity:0.85;">I.E. Demo SIGE-360 · Datos 100% simulados</small>
+    </section>
+
+    <section class="login-form-pane">
+      <h2>Iniciar Sesión</h2>
+      <p>Ingresa con tu cuenta institucional o usa uno de los accesos de demostración.</p>
+
+      <form id="login-form" class="login-form">
+        <div class="field">
+          <label for="email">Correo institucional</label>
+          <input id="email" type="email" placeholder="usuario@sige360.edu.pe" required autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="password">Contraseña</label>
+          <input id="password" type="password" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+        <div id="login-error" class="login-error" hidden></div>
+        <button type="submit" class="btn btn-primary" style="justify-content:center;padding:11px;">Ingresar al Sistema</button>
+      </form>
+
+      <div class="demo-accounts">
+        <small>Accesos rápidos de demostración (clic para autocompletar e ingresar)</small>
+        <button type="button" class="demo-btn" data-email="docente@sige360.edu.pe" data-pass="docente2026">
+          <div>
+            <strong>Docente / Tutor — Prof. Ana Salas</strong>
+            <span>docente@sige360.edu.pe · Clave: docente2026</span>
+          </div>
+          <span class="badge badge-GENERAL">Portal Docente</span>
+        </button>
+        <button type="button" class="demo-btn" data-email="padre@sige360.edu.pe" data-pass="padre2026">
+          <div>
+            <strong>Padre / Apoderado — Elena Paredes (Demo)</strong>
+            <span>padre@sige360.edu.pe · Clave: padre2026</span>
+          </div>
+          <span class="badge badge-VERDE">Portal Padres</span>
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const form = document.getElementById('login-form');
+    const errBox = document.getElementById('login-error');
+
+    async function autenticar(email, password) {
+      errBox.hidden = true;
+      const r = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        errBox.textContent = d.error || 'Error al iniciar sesión.';
+        errBox.hidden = false;
+        return;
+      }
+      window.location.href = d.redirect;
+    }
+
+    form.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      autenticar(document.getElementById('email').value, document.getElementById('password').value);
+    });
+
+    document.querySelectorAll('.demo-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.getElementById('email').value = btn.dataset.email;
+        document.getElementById('password').value = btn.dataset.pass;
+        autenticar(btn.dataset.email, btn.dataset.pass);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -63,12 +63,10 @@
         </div>
 
         <div class="topbar-right">
-          <div class="segmented" role="group" aria-label="Rol activo">
-            <button id="btn-rol-tutor" class="seg-btn active" type="button">Tutor / Docente</button>
-            <button id="btn-rol-padre" class="seg-btn" type="button">Padre / Apoderado</button>
-          </div>
+          <span id="usuario-activo-pill" class="badge badge-GENERAL">Docente · Prof. Ana Salas</span>
           <button id="btn-imprimir" class="btn btn-secondary" type="button">Exportar PDF</button>
           <a class="btn btn-dark" href="/semaforo.html" target="_blank" rel="noopener">Pantalla IoT ↗</a>
+          <button id="btn-logout-docente" class="btn btn-secondary" type="button">Cerrar sesión</button>
         </div>
       </header>
 
@@ -272,31 +270,6 @@
             </div>
 
             <div class="card">
-              <div class="card-head">
-                <div>
-                  <h2>Historial de Calificaciones Registradas</h2>
-                  <p>Filtrado en vivo desde PostgreSQL</p>
-                </div>
-                <div class="toolbar">
-                  <select id="filtro-notas-grado" class="search-input" style="width:165px;">
-                    <option value="TODOS">Todos los grados</option>
-                    <option value="1ro Secundaria">1ro Secundaria</option>
-                    <option value="2do Secundaria">2do Secundaria</option>
-                    <option value="3ro Secundaria">3ro Secundaria</option>
-                    <option value="4to Secundaria">4to Secundaria</option>
-                    <option value="5to Secundaria">5to Secundaria</option>
-                  </select>
-                  <select id="filtro-notas-curso" class="search-input" style="width:165px;">
-                    <option value="TODOS">Todos los cursos</option>
-                    <option value="Matemática">Matemática</option>
-                    <option value="Comunicación">Comunicación</option>
-                    <option value="Ciencia y Tecnología">Ciencia y Tecnología</option>
-                    <option value="Historia y Geografía">Historia y Geografía</option>
-                    <option value="Inglés">Inglés</option>
-                    <option value="Física">Física</option>
-                  </select>
-                </div>
-              </div>
               <div class="table-wrap">
                 <table>
                   <thead>

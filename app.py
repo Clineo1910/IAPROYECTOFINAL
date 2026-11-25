@@ -1,4 +1,4 @@
-# app.py - Aplicación web SIGE-360 en Python (FastAPI + PostgreSQL + puente a n8n)
+# app.py - Aplicación web SIGE-360 en Python (FastAPI + PostgreSQL + Auth RBAC + puente a n8n)
 import os
 import json
 import uuid
@@ -8,7 +8,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -19,8 +19,26 @@ MCP_AUDIT_FILE = os.path.join(RAIZ, 'agente', 'mcp_audit.jsonl')
 N8N_WEBHOOK_URL = os.environ.get('N8N_WEBHOOK_URL', 'http://localhost:5678/webhook/agente')
 PORT = int(os.environ.get('PORT', '3060'))
 
-# Sesiones en memoria (id_sesion -> rol)
-SESIONES: dict[str, str] = {}
+# Cuentas demo con roles y permisos diferenciados (datos 100% simulados)
+USUARIOS_DEMO = {
+    'docente@sige360.edu.pe': {
+        'password': 'docente2026',
+        'rol': 'tutor',
+        'nombre': 'Prof. Ana Salas',
+        'cargo': 'Tutora Académica · 3ro–5to Sec.',
+        'alumno_id': None,
+    },
+    'padre@sige360.edu.pe': {
+        'password': 'padre2026',
+        'rol': 'padre',
+        'nombre': 'Elena Paredes (Demo)',
+        'cargo': 'Apoderada de Lucas Mendoza Paredes (4to Sec. B)',
+        'alumno_id': 3,
+    },
+}
+
+# Sesiones activas en memoria: sid -> dict(email, rol, nombre, cargo, alumno_id)
+SESIONES: dict[str, dict] = {}
 
 app = FastAPI(title='SIGE-360')
 
@@ -127,17 +145,25 @@ def evaluar_fila(m: dict) -> dict:
     }
 
 
-def obtener_o_crear_sesion(request: Request, response: Response) -> tuple[str, str]:
+def obtener_usuario_actual(request: Request) -> tuple[str | None, dict | None]:
     sid = request.cookies.get('sige360_sid')
-    if not sid:
-        sid = uuid.uuid4().hex
-        response.set_cookie('sige360_sid', sid, httponly=True, max_age=14400)
-    rol = SESIONES.setdefault(sid, 'tutor')
-    return sid, rol
+    if sid and sid in SESIONES:
+        return sid, SESIONES[sid]
+    return None, None
 
 
-class RolEntrada(BaseModel):
-    rol: str
+def exigir_tutor(request: Request):
+    _, user = obtener_usuario_actual(request)
+    if not user:
+        return JSONResponse({'error': 'Debes iniciar sesión.'}, status_code=401)
+    if user['rol'] != 'tutor':
+        return JSONResponse({'error': 'Permiso denegado: acción exclusiva para docentes/tutores.'}, status_code=403)
+    return None
+
+
+class LoginEntrada(BaseModel):
+    email: str
+    password: str
 
 
 class ChatEntrada(BaseModel):
@@ -191,9 +217,94 @@ class IntervencionEstadoEntrada(BaseModel):
     estado: str
 
 
+# ==================== AUTENTICACIÓN ====================
+@app.post('/api/login')
+def api_login(entrada: LoginEntrada, response: Response):
+    email = entrada.email.strip().lower()
+    cuenta = USUARIOS_DEMO.get(email)
+    if not cuenta or cuenta['password'] != entrada.password:
+        return JSONResponse({'error': 'Correo o contraseña incorrectos.'}, status_code=401)
+
+    sid = uuid.uuid4().hex
+    SESIONES[sid] = {
+        'email': email,
+        'rol': cuenta['rol'],
+        'nombre': cuenta['nombre'],
+        'cargo': cuenta['cargo'],
+        'alumno_id': cuenta['alumno_id'],
+    }
+    response.set_cookie('sige360_sid', sid, httponly=True, max_age=28800, samesite='lax')
+    destino = '/padres.html' if cuenta['rol'] == 'padre' else '/'
+    return {'ok': True, 'usuario': SESIONES[sid], 'redirect': destino}
+
+
+@app.post('/api/logout')
+def api_logout(request: Request, response: Response):
+    sid = request.cookies.get('sige360_sid')
+    if sid and sid in SESIONES:
+        del SESIONES[sid]
+    response.delete_cookie('sige360_sid')
+    return {'ok': True, 'redirect': '/login.html'}
+
+
+@app.get('/api/me')
+def api_me(request: Request):
+    sid, user = obtener_usuario_actual(request)
+    if not user:
+        return JSONResponse({'autenticado': False}, status_code=401)
+    return {'autenticado': True, 'sesion': sid, 'usuario': user}
+
+
+# ==================== PORTAL DE PADRES (SOLO SU HIJO) ====================
+@app.get('/api/mi-hijo')
+def api_mi_hijo(request: Request):
+    _, user = obtener_usuario_actual(request)
+    if not user:
+        return JSONResponse({'error': 'No autenticado'}, status_code=401)
+    alumno_id = user.get('alumno_id') or 3
+    try:
+        filas = consultar(f"{SQL_METRICAS} WHERE a.id = %s LIMIT 1", (alumno_id,))
+        if not filas:
+            return JSONResponse({'error': 'Estudiante no encontrado'}, status_code=404)
+        perfil = evaluar_fila(filas[0])
+        notas = consultar(
+            "SELECT curso, bimestre, nota, fecha_registro FROM notas WHERE alumno_id = %s ORDER BY bimestre DESC, curso ASC",
+            (alumno_id,),
+        )
+        asistencia = consultar(
+            "SELECT fecha, estado, hora_rfid, origen FROM asistencia WHERE alumno_id = %s ORDER BY fecha DESC LIMIT 12",
+            (alumno_id,),
+        )
+        # Solo avisos/intervenciones públicas de seguimiento, sin incidencias confidenciales internas
+        avisos = consultar(
+            "SELECT fecha, tutor_nombre, accion_acordada, estado FROM intervenciones_tutoriales WHERE alumno_id = %s ORDER BY id DESC LIMIT 5",
+            (alumno_id,),
+        )
+        return {
+            'apoderado': user['nombre'],
+            'alumno': {
+                'alumno_id': perfil['alumno_id'],
+                'codigo_estudiante': perfil['codigo_estudiante'],
+                'nombre_completo': perfil['nombre_completo'],
+                'grado': perfil['grado'],
+                'seccion': perfil['seccion'],
+                'nivel_semaforo': perfil['nivel_semaforo'],
+                'promedio_notas': perfil['metricas']['promedio_notas'],
+                'faltas': perfil['metricas']['faltas'],
+                'tardanzas': perfil['metricas']['tardanzas'],
+            },
+            'notas': notas,
+            'asistencia': asistencia,
+            'avisos_tutor': avisos,
+        }
+    except Exception as exc:
+        print('[APP] Error /api/mi-hijo:', exc)
+        return JSONResponse({'error': 'Error cargando información del estudiante'}, status_code=500)
+
+
+# ==================== ENDPOINTS DOCENTES / IoT ====================
 @app.get('/api/mcp-logs')
 def api_mcp_logs():
-    """Devuelve las últimas llamadas reales al servidor MCP (Rayos X del Agente)."""
     if not os.path.exists(MCP_AUDIT_FILE):
         return {'logs': []}
     try:
@@ -206,227 +317,9 @@ def api_mcp_logs():
         return {'logs': []}
 
 
-@app.post('/api/rfid-scan')
-def api_rfid_scan(entrada: RfidScanEntrada):
-    """Registra una lectura simulada del lector RFID de puerta para cualquier alumno."""
-    estado = entrada.estado.upper().strip()
-    if estado not in ('PRESENTE', 'TARDANZA', 'FALTA'):
-        return JSONResponse({'error': 'Estado RFID inválido'}, status_code=400)
-    ahora = datetime.now()
-    hora_rfid = None if estado == 'FALTA' else ahora.strftime('%H:%M:%S')
-    try:
-        with obtener_conexion() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """INSERT INTO asistencia (alumno_id, fecha, estado, hora_rfid, origen)
-                       VALUES (%s, %s, %s, %s, 'RFID_PUERTA')""",
-                    (entrada.alumno_id, ahora.strftime('%Y-%m-%d'), estado, hora_rfid),
-                )
-            conn.commit()
-        return {'ok': True, 'mensaje': f'Lectura RFID registrada: alumno ID {entrada.alumno_id} → {estado}.'}
-    except Exception as exc:
-        print('[APP] Error escáner RFID:', exc)
-        return JSONResponse({'error': 'No se pudo registrar lectura RFID'}, status_code=500)
-
-
-@app.get('/api/notas')
-def api_listar_notas():
-    try:
-        filas = consultar(
-            """SELECT n.id, n.alumno_id, a.nombre_completo, a.grado, a.seccion,
-                      n.curso, n.bimestre, n.nota, n.fecha_registro
-               FROM notas n JOIN alumnos a ON a.id = n.alumno_id
-               ORDER BY n.id DESC LIMIT 40"""
-        )
-        return {'notas': filas}
-    except Exception as exc:
-        print('[APP] Error listando notas:', exc)
-        return JSONResponse({'error': 'No se pudieron cargar las notas'}, status_code=500)
-
-
-@app.post('/api/notas')
-def api_crear_nota(entrada: NotaEntrada):
-    if entrada.nota < 0 or entrada.nota > 20 or entrada.bimestre not in (1, 2, 3, 4):
-        return JSONResponse({'error': 'La nota debe estar entre 0 y 20, y el bimestre entre 1 y 4.'}, status_code=400)
-    try:
-        hoy = datetime.now().strftime('%Y-%m-%d')
-        with obtener_conexion() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(
-                    """INSERT INTO notas (alumno_id, curso, bimestre, nota, fecha_registro)
-                       VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-                    (entrada.alumno_id, entrada.curso.strip(), entrada.bimestre, round(entrada.nota, 2), hoy),
-                )
-                creado = cur.fetchone()
-            conn.commit()
-        return {'ok': True, 'id': creado['id'], 'mensaje': f'Nota {entrada.nota} en {entrada.curso} registrada y semáforo recalculado.'}
-    except Exception as exc:
-        print('[APP] Error registrando nota:', exc)
-        return JSONResponse({'error': 'No se pudo registrar la nota'}, status_code=500)
-
-
-@app.post('/api/notas/lote')
-def api_crear_notas_lote(entrada: NotaLoteEntrada):
-    if entrada.bimestre not in (1, 2, 3, 4) or not entrada.calificaciones:
-        return JSONResponse({'error': 'Bimestre o lista de calificaciones inválidos.'}, status_code=400)
-    try:
-        hoy = datetime.now().strftime('%Y-%m-%d')
-        curso = entrada.curso.strip()
-        guardadas = 0
-        with obtener_conexion() as conn:
-            with conn.cursor() as cur:
-                for item in entrada.calificaciones:
-                    if item.nota < 0 or item.nota > 20:
-                        continue
-                    cur.execute(
-                        """DELETE FROM notas WHERE alumno_id = %s AND curso = %s AND bimestre = %s""",
-                        (item.alumno_id, curso, entrada.bimestre),
-                    )
-                    cur.execute(
-                        """INSERT INTO notas (alumno_id, curso, bimestre, nota, fecha_registro)
-                           VALUES (%s, %s, %s, %s, %s)""",
-                        (item.alumno_id, curso, entrada.bimestre, round(item.nota, 2), hoy),
-                    )
-                    guardadas += 1
-            conn.commit()
-        return {
-            'ok': True,
-            'guardadas': guardadas,
-            'mensaje': f'Acta guardada: {guardadas} calificaciones de {curso} (Bimestre {entrada.bimestre}) actualizadas en PostgreSQL.',
-        }
-    except Exception as exc:
-        print('[APP] Error guardando acta por lote:', exc)
-        return JSONResponse({'error': 'No se pudo guardar el acta de calificaciones'}, status_code=500)
-
-
-@app.get('/api/convivencia')
-def api_listar_convivencia():
-    try:
-        incidencias = consultar(
-            """SELECT i.id, i.alumno_id, a.nombre_completo, a.grado, a.seccion,
-                      i.fecha, i.tipo, i.gravedad, i.descripcion
-               FROM incidencias_convivencia i JOIN alumnos a ON a.id = i.alumno_id
-               ORDER BY i.id DESC LIMIT 30"""
-        )
-        biblioteca = consultar(
-            """SELECT b.id, b.alumno_id, a.nombre_completo, a.grado, a.seccion,
-                      b.fecha, b.accion, b.libro
-               FROM biblioteca_uso b JOIN alumnos a ON a.id = b.alumno_id
-               ORDER BY b.id DESC LIMIT 30"""
-        )
-        return {'incidencias': incidencias, 'biblioteca': biblioteca}
-    except Exception as exc:
-        print('[APP] Error listando convivencia/biblioteca:', exc)
-        return JSONResponse({'error': 'No se pudieron cargar los registros'}, status_code=500)
-
-
-@app.post('/api/incidencias')
-def api_crear_incidencia(entrada: IncidenciaEntrada):
-    tipo = entrada.tipo.upper().strip()
-    gravedad = entrada.gravedad.upper().strip()
-    if tipo not in ('DISRUPCION', 'CONFLICTO', 'AISLAMIENTO', 'RECONOCIMIENTO') or gravedad not in ('BAJA', 'MEDIA', 'ALTA'):
-        return JSONResponse({'error': 'Tipo o gravedad inválidos.'}, status_code=400)
-    try:
-        hoy = datetime.now().strftime('%Y-%m-%d')
-        with obtener_conexion() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(
-                    """INSERT INTO incidencias_convivencia (alumno_id, fecha, tipo, gravedad, descripcion)
-                       VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-                    (entrada.alumno_id, hoy, tipo, gravedad, entrada.descripcion.strip()[:250]),
-                )
-                creado = cur.fetchone()
-            conn.commit()
-        return {'ok': True, 'id': creado['id'], 'mensaje': f'Incidencia ({tipo} · {gravedad}) registrada y score actualizado.'}
-    except Exception as exc:
-        print('[APP] Error registrando incidencia:', exc)
-        return JSONResponse({'error': 'No se pudo registrar la incidencia'}, status_code=500)
-
-
-@app.post('/api/biblioteca')
-def api_crear_biblioteca(entrada: BibliotecaEntrada):
-    accion = entrada.accion.upper().strip()
-    if accion not in ('PRESTAMO', 'LECTURA_SALA', 'DEVOLUCION_TARDIA', 'NO_DEVUELTO'):
-        return JSONResponse({'error': 'Acción de biblioteca inválida.'}, status_code=400)
-    try:
-        hoy = datetime.now().strftime('%Y-%m-%d')
-        with obtener_conexion() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(
-                    """INSERT INTO biblioteca_uso (alumno_id, fecha, accion, libro)
-                       VALUES (%s, %s, %s, %s) RETURNING id""",
-                    (entrada.alumno_id, hoy, accion, entrada.libro.strip()[:115]),
-                )
-                creado = cur.fetchone()
-            conn.commit()
-        return {'ok': True, 'id': creado['id'], 'mensaje': f'Movimiento de biblioteca ({accion}) registrado.'}
-    except Exception as exc:
-        print('[APP] Error registrando biblioteca:', exc)
-        return JSONResponse({'error': 'No se pudo registrar movimiento de biblioteca'}, status_code=500)
-
-
-@app.post('/api/alumnos')
-def api_crear_alumno(entrada: AlumnoEntrada):
-    nombre = entrada.nombre_completo.strip()
-    if len(nombre) < 4:
-        return JSONResponse({'error': 'Ingrese nombre y apellido del estudiante.'}, status_code=400)
-    try:
-        with obtener_conexion() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT COALESCE(MAX(id), 0) + 1 AS sig FROM alumnos")
-                sig = int(cur.fetchone()['sig'])
-                codigo = f"EST-2026-{sig:03d}"
-                rfid = f"RFID-A{100 + sig}"
-                contacto = f"apoderado{sig:02d}@demo.sige360.local"
-                cur.execute(
-                    """INSERT INTO alumnos (codigo_estudiante, codigo_rfid, nombre_completo, grado, seccion, apoderado_nombre, apoderado_contacto)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, codigo_estudiante, codigo_rfid""",
-                    (codigo, rfid, nombre, entrada.grado.strip(), entrada.seccion.strip()[:1].upper(), entrada.apoderado_nombre.strip() or 'Apoderado (Demo)', contacto),
-                )
-                creado = dict(cur.fetchone())
-            conn.commit()
-        return {'ok': True, 'alumno': creado, 'mensaje': f'Estudiante {nombre} matriculado ({codigo} · {rfid}).'}
-    except Exception as exc:
-        print('[APP] Error creando alumno:', exc)
-        return JSONResponse({'error': 'No se pudo registrar el estudiante'}, status_code=500)
-
-
-@app.patch('/api/intervenciones/{intervencion_id}')
-def api_actualizar_intervencion(intervencion_id: int, entrada: IntervencionEstadoEntrada):
-    estado = entrada.estado.upper().strip()
-    if estado not in ('PROGRAMADA', 'SEGUIMIENTO', 'REALIZADA'):
-        return JSONResponse({'error': 'Estado inválido'}, status_code=400)
-    try:
-        with obtener_conexion() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE intervenciones_tutoriales SET estado = %s WHERE id = %s",
-                    (estado, intervencion_id),
-                )
-            conn.commit()
-        return {'ok': True, 'estado': estado}
-    except Exception as exc:
-        print('[APP] Error actualizando intervención:', exc)
-        return JSONResponse({'error': 'No se pudo actualizar estado'}, status_code=500)
-
-
-@app.get('/api/sesion')
-def api_sesion(request: Request, response: Response):
-    sid, rol = obtener_o_crear_sesion(request, response)
-    return {'sesion': sid, 'rol': rol}
-
-
-@app.post('/api/rol')
-def api_rol(entrada: RolEntrada, request: Request, response: Response):
-    if entrada.rol not in ('tutor', 'padre'):
-        return JSONResponse({'error': 'Rol inválido'}, status_code=400)
-    sid, _ = obtener_o_crear_sesion(request, response)
-    SESIONES[sid] = entrada.rol
-    return {'ok': True, 'rol': entrada.rol}
-
-
 @app.get('/api/dashboard')
 def api_dashboard():
+    # Accesible por Portal Docente y por la pantalla IoT de Sala de Profesores
     try:
         filas = consultar(f"{SQL_METRICAS} ORDER BY a.id ASC LIMIT 50")
         alumnos = [evaluar_fila(f) for f in filas]
@@ -462,14 +355,17 @@ def api_dashboard():
 
 
 @app.get('/api/alumno/{alumno_id}')
-def api_alumno_detalle(alumno_id: int):
+def api_alumno_detalle(alumno_id: int, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
     try:
         filas = consultar(f"{SQL_METRICAS} WHERE a.id = %s LIMIT 1", (alumno_id,))
         if not filas:
             return JSONResponse({'error': 'Alumno no encontrado'}, status_code=404)
         perfil = evaluar_fila(filas[0])
         notas = consultar(
-            "SELECT curso, bimestre, nota, fecha_registro FROM notas WHERE alumno_id = %s ORDER BY fecha_registro DESC LIMIT 10",
+            "SELECT curso, bimestre, nota, fecha_registro FROM notas WHERE alumno_id = %s ORDER BY fecha_registro DESC LIMIT 12",
             (alumno_id,),
         )
         asistencia = consultar(
@@ -513,8 +409,217 @@ def api_protocolos():
         return JSONResponse({'error': 'Error cargando protocolos'}, status_code=500)
 
 
+@app.post('/api/rfid-scan')
+def api_rfid_scan(entrada: RfidScanEntrada, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    estado = entrada.estado.upper().strip()
+    if estado not in ('PRESENTE', 'TARDANZA', 'FALTA'):
+        return JSONResponse({'error': 'Estado RFID inválido'}, status_code=400)
+    ahora = datetime.now()
+    hora_rfid = None if estado == 'FALTA' else ahora.strftime('%H:%M:%S')
+    try:
+        with obtener_conexion() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO asistencia (alumno_id, fecha, estado, hora_rfid, origen)
+                       VALUES (%s, %s, %s, %s, 'RFID_PUERTA')""",
+                    (entrada.alumno_id, ahora.strftime('%Y-%m-%d'), estado, hora_rfid),
+                )
+            conn.commit()
+        return {'ok': True, 'mensaje': f'Lectura RFID registrada: alumno ID {entrada.alumno_id} → {estado}.'}
+    except Exception as exc:
+        print('[APP] Error escáner RFID:', exc)
+        return JSONResponse({'error': 'No se pudo registrar lectura RFID'}, status_code=500)
+
+
+@app.get('/api/notas')
+def api_listar_notas(request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    try:
+        filas = consultar(
+            """SELECT n.id, n.alumno_id, a.nombre_completo, a.grado, a.seccion,
+                      n.curso, n.bimestre, n.nota, n.fecha_registro
+               FROM notas n JOIN alumnos a ON a.id = n.alumno_id
+               ORDER BY n.id DESC LIMIT 160"""
+        )
+        return {'notas': filas}
+    except Exception as exc:
+        print('[APP] Error listando notas:', exc)
+        return JSONResponse({'error': 'No se pudieron cargar las notas'}, status_code=500)
+
+
+@app.post('/api/notas/lote')
+def api_crear_notas_lote(entrada: NotaLoteEntrada, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    if entrada.bimestre not in (1, 2, 3, 4) or not entrada.calificaciones:
+        return JSONResponse({'error': 'Bimestre o lista de calificaciones inválidos.'}, status_code=400)
+    try:
+        hoy = datetime.now().strftime('%Y-%m-%d')
+        curso = entrada.curso.strip()
+        guardadas = 0
+        with obtener_conexion() as conn:
+            with conn.cursor() as cur:
+                for item in entrada.calificaciones:
+                    if item.nota < 0 or item.nota > 20:
+                        continue
+                    cur.execute(
+                        "DELETE FROM notas WHERE alumno_id = %s AND curso = %s AND bimestre = %s",
+                        (item.alumno_id, curso, entrada.bimestre),
+                    )
+                    cur.execute(
+                        """INSERT INTO notas (alumno_id, curso, bimestre, nota, fecha_registro)
+                           VALUES (%s, %s, %s, %s, %s)""",
+                        (item.alumno_id, curso, entrada.bimestre, round(item.nota, 2), hoy),
+                    )
+                    guardadas += 1
+            conn.commit()
+        return {
+            'ok': True,
+            'guardadas': guardadas,
+            'mensaje': f'Acta guardada: {guardadas} calificaciones de {curso} (Bimestre {entrada.bimestre}) actualizadas en PostgreSQL.',
+        }
+    except Exception as exc:
+        print('[APP] Error guardando acta por lote:', exc)
+        return JSONResponse({'error': 'No se pudo guardar el acta de calificaciones'}, status_code=500)
+
+
+@app.get('/api/convivencia')
+def api_listar_convivencia(request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    try:
+        incidencias = consultar(
+            """SELECT i.id, i.alumno_id, a.nombre_completo, a.grado, a.seccion,
+                      i.fecha, i.tipo, i.gravedad, i.descripcion
+               FROM incidencias_convivencia i JOIN alumnos a ON a.id = i.alumno_id
+               ORDER BY i.id DESC LIMIT 30"""
+        )
+        biblioteca = consultar(
+            """SELECT b.id, b.alumno_id, a.nombre_completo, a.grado, a.seccion,
+                      b.fecha, b.accion, b.libro
+               FROM biblioteca_uso b JOIN alumnos a ON a.id = b.alumno_id
+               ORDER BY b.id DESC LIMIT 30"""
+        )
+        return {'incidencias': incidencias, 'biblioteca': biblioteca}
+    except Exception as exc:
+        print('[APP] Error listando convivencia/biblioteca:', exc)
+        return JSONResponse({'error': 'No se pudieron cargar los registros'}, status_code=500)
+
+
+@app.post('/api/incidencias')
+def api_crear_incidencia(entrada: IncidenciaEntrada, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    tipo = entrada.tipo.upper().strip()
+    gravedad = entrada.gravedad.upper().strip()
+    if tipo not in ('DISRUPCION', 'CONFLICTO', 'AISLAMIENTO', 'RECONOCIMIENTO') or gravedad not in ('BAJA', 'MEDIA', 'ALTA'):
+        return JSONResponse({'error': 'Tipo o gravedad inválidos.'}, status_code=400)
+    try:
+        hoy = datetime.now().strftime('%Y-%m-%d')
+        with obtener_conexion() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """INSERT INTO incidencias_convivencia (alumno_id, fecha, tipo, gravedad, descripcion)
+                       VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                    (entrada.alumno_id, hoy, tipo, gravedad, entrada.descripcion.strip()[:250]),
+                )
+                creado = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'id': creado['id'], 'mensaje': f'Incidencia ({tipo} · {gravedad}) registrada y score actualizado.'}
+    except Exception as exc:
+        print('[APP] Error registrando incidencia:', exc)
+        return JSONResponse({'error': 'No se pudo registrar la incidencia'}, status_code=500)
+
+
+@app.post('/api/biblioteca')
+def api_crear_biblioteca(entrada: BibliotecaEntrada, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    accion = entrada.accion.upper().strip()
+    if accion not in ('PRESTAMO', 'LECTURA_SALA', 'DEVOLUCION_TARDIA', 'NO_DEVUELTO'):
+        return JSONResponse({'error': 'Acción de biblioteca inválida.'}, status_code=400)
+    try:
+        hoy = datetime.now().strftime('%Y-%m-%d')
+        with obtener_conexion() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """INSERT INTO biblioteca_uso (alumno_id, fecha, accion, libro)
+                       VALUES (%s, %s, %s, %s) RETURNING id""",
+                    (entrada.alumno_id, hoy, accion, entrada.libro.strip()[:115]),
+                )
+                creado = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'id': creado['id'], 'mensaje': f'Movimiento de biblioteca ({accion}) registrado.'}
+    except Exception as exc:
+        print('[APP] Error registrando biblioteca:', exc)
+        return JSONResponse({'error': 'No se pudo registrar movimiento de biblioteca'}, status_code=500)
+
+
+@app.post('/api/alumnos')
+def api_crear_alumno(entrada: AlumnoEntrada, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    nombre = entrada.nombre_completo.strip()
+    if len(nombre) < 4:
+        return JSONResponse({'error': 'Ingrese nombre y apellido del estudiante.'}, status_code=400)
+    try:
+        with obtener_conexion() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT COALESCE(MAX(id), 0) + 1 AS sig FROM alumnos")
+                sig = int(cur.fetchone()['sig'])
+                codigo = f"EST-2026-{sig:03d}"
+                rfid = f"RFID-A{100 + sig}"
+                contacto = f"apoderado{sig:02d}@demo.sige360.local"
+                cur.execute(
+                    """INSERT INTO alumnos (codigo_estudiante, codigo_rfid, nombre_completo, grado, seccion, apoderado_nombre, apoderado_contacto)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, codigo_estudiante, codigo_rfid""",
+                    (codigo, rfid, nombre, entrada.grado.strip(), entrada.seccion.strip()[:1].upper(), entrada.apoderado_nombre.strip() or 'Apoderado (Demo)', contacto),
+                )
+                creado = dict(cur.fetchone())
+            conn.commit()
+        return {'ok': True, 'alumno': creado, 'mensaje': f'Estudiante {nombre} matriculado ({codigo} · {rfid}).'}
+    except Exception as exc:
+        print('[APP] Error creando alumno:', exc)
+        return JSONResponse({'error': 'No se pudo registrar el estudiante'}, status_code=500)
+
+
+@app.patch('/api/intervenciones/{intervencion_id}')
+def api_actualizar_intervencion(intervencion_id: int, entrada: IntervencionEstadoEntrada, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    estado = entrada.estado.upper().strip()
+    if estado not in ('PROGRAMADA', 'SEGUIMIENTO', 'REALIZADA'):
+        return JSONResponse({'error': 'Estado inválido'}, status_code=400)
+    try:
+        with obtener_conexion() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE intervenciones_tutoriales SET estado = %s WHERE id = %s",
+                    (estado, intervencion_id),
+                )
+            conn.commit()
+        return {'ok': True, 'estado': estado}
+    except Exception as exc:
+        print('[APP] Error actualizando intervención:', exc)
+        return JSONResponse({'error': 'No se pudo actualizar estado'}, status_code=500)
+
+
 @app.post('/api/simular-rfid')
-def api_simular_rfid():
+def api_simular_rfid(request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
     alumno_id = 3  # Lucas Mendoza Paredes
     try:
         with obtener_conexion() as conn:
@@ -544,7 +649,10 @@ def api_simular_rfid():
 
 
 @app.post('/api/reset-demo')
-def api_reset_demo():
+def api_reset_demo(request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
     alumno_id = 3
     with obtener_conexion() as conn:
         with conn.cursor() as cur:
@@ -555,16 +663,24 @@ def api_reset_demo():
 
 
 @app.post('/api/chat')
-def api_chat(entrada: ChatEntrada, request: Request, response: Response):
-    sid, rol = obtener_o_crear_sesion(request, response)
+def api_chat(entrada: ChatEntrada, request: Request):
+    sid, user = obtener_usuario_actual(request)
+    if not user:
+        return JSONResponse({'respuesta': 'Tu sesión expiró. Inicia sesión nuevamente.'}, status_code=401)
     mensaje = entrada.mensaje.strip()
     if not mensaje or len(mensaje) > 500:
         return {'respuesta': 'Escriba una consulta de hasta 500 caracteres.'}
 
+    rol = user['rol']
+    if rol == 'padre':
+        mensaje_enviado = f"(Apoderado autenticado: {user['nombre']}, solo autorizado para su hijo Lucas Mendoza Paredes ID 3) {mensaje}"
+    else:
+        mensaje_enviado = mensaje
+
     try:
         r = requests.post(
             N8N_WEBHOOK_URL,
-            json={'sesion': sid, 'rol': rol, 'mensaje': mensaje},
+            json={'sesion': sid, 'rol': rol, 'mensaje': mensaje_enviado},
             timeout=60,
         )
         if not r.ok:
@@ -578,13 +694,26 @@ def api_chat(entrada: ChatEntrada, request: Request, response: Response):
         return {'respuesta': 'El asistente no está disponible. Verifique que n8n y el servidor MCP estén encendidos.'}
 
 
-# Servir archivos estáticos del frontend
+# ==================== RUTAS PROTEGIDAS DE PÁGINAS ====================
 PUBLIC_DIR = os.path.join(RAIZ, 'public')
 
 
 @app.get('/')
-def servir_inicio():
+def servir_docente(request: Request):
+    _, user = obtener_usuario_actual(request)
+    if not user:
+        return RedirectResponse('/login.html', status_code=302)
+    if user['rol'] == 'padre':
+        return RedirectResponse('/padres.html', status_code=302)
     return FileResponse(os.path.join(PUBLIC_DIR, 'index.html'))
+
+
+@app.get('/padres.html')
+def servir_padres(request: Request):
+    _, user = obtener_usuario_actual(request)
+    if not user:
+        return RedirectResponse('/login.html', status_code=302)
+    return FileResponse(os.path.join(PUBLIC_DIR, 'padres.html'))
 
 
 app.mount('/', StaticFiles(directory=PUBLIC_DIR), name='public')

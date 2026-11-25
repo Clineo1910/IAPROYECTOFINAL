@@ -476,8 +476,30 @@ chatForm.addEventListener('submit', async (ev) => {
   await enviarConsultaAlAgente(texto);
 });
 
-btnRolTutor.addEventListener('click', () => cambiarRol('tutor'));
-btnRolPadre.addEventListener('click', () => cambiarRol('padre'));
+btnRolTutor?.addEventListener('click', () => cambiarRol('tutor'));
+btnRolPadre?.addEventListener('click', () => cambiarRol('padre'));
+document.getElementById('btn-logout-docente')?.addEventListener('click', async () => {
+  await fetch('/api/logout', { method: 'POST' });
+  window.location.href = '/login.html';
+});
+
+async function verificarSesionDocente() {
+  const r = await fetch('/api/me');
+  if (!r.ok) {
+    window.location.href = '/login.html';
+    return;
+  }
+  const d = await r.json();
+  if (d.usuario?.rol === 'padre') {
+    window.location.href = '/padres.html';
+    return;
+  }
+  const pill = document.getElementById('usuario-activo-pill');
+  if (pill && d.usuario) {
+    pill.textContent = `Docente · ${d.usuario.nombre}`;
+  }
+}
+verificarSesionDocente();
 document.getElementById('btn-refrescar-int').addEventListener('click', cargarDashboard);
 document.getElementById('btn-cerrar-modal').addEventListener('click', () => {
   document.getElementById('modal-ficha').hidden = true;
