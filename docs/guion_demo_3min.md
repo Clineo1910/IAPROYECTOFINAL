@@ -1,18 +1,18 @@
 # Guion de Demostración en Vivo (3 Minutos) — SIGE-360
 
 ## 1. Contexto y problema (0:00 – 0:30 · 30 segundos)
-- **Qué decir:** *"Somos el equipo de SIGE-360, un Sistema de Inteligencia Escolar Predictiva. En muchos colegios las señales de deserción —faltas, bajas notas, incidencias de convivencia y desvinculación en biblioteca— están dispersas y se detectan demasiado tarde. Nuestro agente SIGE-Bot cruza estas 4 señales desde PostgreSQL vía MCP y n8n para calcular un índice de riesgo (0 a 100) y guiar al tutor según los protocolos del MINEDU."*
-- **Qué mostrar:** Dashboard principal en `http://localhost:3060` y, en paralelo (o tablet), la pantalla IoT `http://localhost:3060/semaforo.html`.
+- **Qué decir:** *"Somos el equipo de SIGE-360, un Sistema de Inteligencia Escolar Predictiva. En los colegios, las señales de deserción —faltas, bajas notas, convivencia y biblioteca— están dispersas. SIGE-360 cruza estas 4 señales desde PostgreSQL con 6 herramientas MCP y n8n para calcular un índice de riesgo (0–100), alertar en una pantalla semáforo de Sala de Profesores y notificar al apoderado por Telegram."*
+- **Qué mostrar:** Login en `http://localhost:3060/login.html` → entrar como **Docente** (`docente@sige360.edu.pe` / `docente2026`) y tener abierta en otra pestaña la pantalla IoT `http://localhost:3060/semaforo.html`.
 
-## 2. Tres preguntas en vivo + Factor Wow (0:30 – 2:00 · 90 segundos)
-1. **Pregunta 1 (Listado de riesgo):** Escribir en el chat *"¿Qué alumnos están en alerta roja hoy?"* → Muestra a Mateo Quispe (100), Diego Huamán (85) y Thiago Chávez (72). **Mostrar rápidamente la pestaña de ejecuciones de n8n** donde se ve que el AI Agent llamó a la herramienta MCP `listar_alumnos_en_riesgo`.
-2. **Pregunta 2 (Factor Wow — Simulador RFID + Protocolo MINEDU):** Pulsar **"Simular 3 faltas RFID + Nota 06"** sobre Lucas Mendoza (ID 3). Mostrar cómo el semáforo de la pantalla IoT cambia en vivo de **ÁMBAR (35)** a **ROJO (82)** y SIGE-Bot consulta `calcular_indice_riesgo` + `consultar_protocolo_tutoria` para citar **PROT-04** y redactar el mensaje empático al apoderado.
-3. **Pregunta 3 (Permisos por rol):** Cambiar el botón superior a **Padre / Apoderado** y pedir *"Dame la lista de todos los alumnos en riesgo"* → SIGE-Bot rechaza la solicitud citando confidencialidad (PROT-10 / Ley N.° 29733).
+## 2. Tres preguntas en vivo + Factor Wow + Telegram (0:30 – 2:00 · 90 segundos)
+1. **Pregunta 1 (Datos reales + Rayos X MCP):** Pulsar **"Alumnos en rojo"** o preguntar *"Lístame los estudiantes con notas menores a 11 y en qué cursos están así"* → señalar el panel **⚡ Rayos X MCP en Vivo** debajo del chat (o *Executions* en n8n) donde se ve la herramienta exacta ejecutada (`listar_notas_bajas` / `listar_alumnos_en_riesgo`) y el tiempo en milisegundos.
+2. **Pregunta 2 (Factor Wow — Simulador RFID + Protocolo MINEDU + Telegram):** Pulsar **"Simular 3 faltas RFID + Nota 06"** sobre Lucas Mendoza (ID 3). Mostrar cómo la pantalla IoT `semaforo.html` cambia a **ROJO (82)** con banner de alerta, SIGE-Bot cita **PROT-04** y redacta el mensaje al apoderado → pulsar **"✈ Enviar por Telegram al apoderado"** y mostrar la notificación llegando en vivo al celular.
+3. **Pregunta 3 (Seguridad por roles — Portal de Padres):** Cerrar sesión e ingresar como **Padre** (`padre@sige360.edu.pe` / `padre2026`) en `/padres.html`. Mostrar que solo ve las notas y asistencia de su hijo y pedir en el chat *"Dame la lista de todos los alumnos en alerta roja"* → SIGE-Bot bloquea el acceso citando **Ley N.° 29733**.
 
 ## 3. Pregunta fuera de alcance (2:00 – 2:30 · 30 segundos)
-- Escribir: *"¿Quién ganó el partido de fútbol de ayer?"*
-- Mostrar que SIGE-Bot reconoce sus límites, no inventa datos y recuerda en qué sí puede ayudar.
+- Escribir en el chat: *"¿Quién ganó el partido de fútbol de ayer?"*
+- Mostrar que SIGE-Bot reconoce sus límites, no inventa datos y se identifica como asistente de IA (**Ley N.° 31814**).
 
 ## 4. Qué aprendimos y qué mejoraríamos (2:30 – 3:00 · 30 segundos)
-- **Aprendizajes:** Un agente real no improvisa; decide qué herramienta MCP ejecutar sobre datos reales en PostgreSQL, mantiene memoria por sesión y respeta permisos y privacidad (solo datos simulados, Ley N.° 29733 y transparencia Ley N.° 31814).
-- **Mejoras futuras:** Conectar un lector RFID físico ESP32/RC522 directo a `/api/simular-rfid`, añadir notificaciones WhatsApp/correo aprobadas por el tutor y paneles históricos por bimestre.
+- **Aprendizajes:** Un agente real decide qué herramienta MCP usar sobre datos reales en PostgreSQL con usuario de privilegios mínimos (`agente_sige`), mantiene memoria por sesión, exige confirmación humana antes de escribir y protege la privacidad con datos 100 % simulados.
+- **Mejoras futuras:** Conectar hardware físico ESP32/RC522 directo al endpoint `/api/rfid-scan`, agenda de citaciones con confirmación desde `/padres.html` y reportes históricos anuales.
