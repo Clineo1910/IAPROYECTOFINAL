@@ -667,11 +667,28 @@ function actualizarPromedioAula() {
   el.textContent = `Promedio del aula (${valores.length} alumnos calificados): ${prom.toFixed(2)}`;
 }
 
+function notasUnidad3Simuladas(alumnoId, curso, baseNota) {
+  // Genera notas realistas hasta la Unidad 3 (N1, N2, N3 y Ex. Parcial llenos; N4 y Ex. Final pendientes)
+  const clamp = (v) => Math.max(0, Math.min(20, Math.round(v)));
+  const seed = (alumnoId * 7 + curso.length * 3) % 5;
+  const d1 = seed % 2 === 0 ? 1 : -1;
+  const d2 = seed >= 3 ? -1 : 0;
+  const d3 = seed === 0 ? 0 : (seed % 2 === 0 ? -1 : 1);
+  return {
+    n1: clamp(baseNota + d1),
+    n2: clamp(baseNota + d2),
+    n3: clamp(baseNota + d3),
+    n4: null,
+    parcial: clamp(baseNota),
+    final: null,
+  };
+}
+
 function renderActaPorGrado() {
   const tbody = document.getElementById('tabla-acta-grado');
   const grado = document.getElementById('acta-grado')?.value;
   const curso = document.getElementById('acta-curso')?.value;
-  const bimestre = Number(document.getElementById('acta-bimestre')?.value || 4);
+  const bimestre = Number(document.getElementById('acta-bimestre')?.value || 3);
   if (!tbody || !grado) return;
 
   tbody.textContent = '';
@@ -696,7 +713,16 @@ function renderActaPorGrado() {
     const existente = notasCache.find(
       (n) => n.alumno_id === a.alumno_id && n.curso === curso && Number(n.bimestre) === bimestre
     );
-    const base = existente ? Number(existente.nota) : null;
+    const refNota = existente
+      ? Number(existente.nota)
+      : (a.metricas.promedio_notas !== null ? Number(a.metricas.promedio_notas) : 14);
+
+    // En Bimestre 3 (Unidad 3 en curso): N1, N2, N3 y Ex. Parcial vienen precargados; N4 y Ex. Final quedan listos para rellenar
+    const u3 = bimestre === 3
+      ? notasUnidad3Simuladas(a.alumno_id, curso, refNota)
+      : (existente
+          ? { n1: refNota, n2: refNota, n3: refNota, n4: refNota, parcial: refNota, final: refNota }
+          : { n1: null, n2: null, n3: null, n4: null, parcial: null, final: null });
 
     const tr = document.createElement('tr');
     tr.dataset.alumnoId = String(a.alumno_id);
@@ -717,7 +743,7 @@ function renderActaPorGrado() {
     tdSec.textContent = a.seccion;
     tr.appendChild(tdSec);
 
-    const crearInputTd = (cls, valInicial) => {
+    const crearInputTd = (cls, valInicial, placeholder = '') => {
       const td = document.createElement('td');
       const inp = document.createElement('input');
       inp.type = 'number';
@@ -725,6 +751,7 @@ function renderActaPorGrado() {
       inp.max = '20';
       inp.step = '0.5';
       inp.className = `grade-input ${cls}`;
+      if (placeholder) inp.placeholder = placeholder;
       if (valInicial !== null) inp.value = String(valInicial);
       inp.addEventListener('input', () => recalcularFilaActa(tr));
       td.appendChild(inp);
@@ -732,10 +759,10 @@ function renderActaPorGrado() {
     };
 
     // N1..N4
-    tr.appendChild(crearInputTd('g-n1', base));
-    tr.appendChild(crearInputTd('g-n2', base));
-    tr.appendChild(crearInputTd('g-n3', base));
-    tr.appendChild(crearInputTd('g-n4', base));
+    tr.appendChild(crearInputTd('g-n1', u3.n1));
+    tr.appendChild(crearInputTd('g-n2', u3.n2));
+    tr.appendChild(crearInputTd('g-n3', u3.n3));
+    tr.appendChild(crearInputTd('g-n4', u3.n4, 'Pend.'));
 
     // Prom. Perm. 40%
     const tdPerm = document.createElement('td');
@@ -744,8 +771,8 @@ function renderActaPorGrado() {
     tr.appendChild(tdPerm);
 
     // Ex. Parcial 30% y Ex. Final 30%
-    tr.appendChild(crearInputTd('g-parcial', base));
-    tr.appendChild(crearInputTd('g-final', base));
+    tr.appendChild(crearInputTd('g-parcial', u3.parcial));
+    tr.appendChild(crearInputTd('g-final', u3.final, 'Pend.'));
 
     // Nota Final
     const tdFin = document.createElement('td');
