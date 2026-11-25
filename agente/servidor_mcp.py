@@ -1,5 +1,8 @@
 # servidor_mcp.py - Herramientas MCP de SIGE-360 sobre PostgreSQL (Ruta A: n8n)
 import os
+import json
+import time
+from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
@@ -8,8 +11,25 @@ from mcp.server.fastmcp import FastMCP
 # Carga variables desde .env en la raíz del proyecto
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(RAIZ, '.env'))
+AUDIT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mcp_audit.jsonl')
 
 mcp = FastMCP('sige360-herramientas')
+
+
+def registrar_auditoria_mcp(herramienta: str, parametros: dict, resumen: str, inicio: float):
+    """Guarda un rastro ligero local para el panel Rayos X MCP en tiempo real."""
+    try:
+        evento = {
+            'hora': datetime.now().strftime('%H:%M:%S'),
+            'herramienta': herramienta,
+            'parametros': parametros,
+            'resumen': resumen,
+            'ms': int((time.perf_counter() - inicio) * 1000),
+        }
+        with open(AUDIT_FILE, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(evento, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
 
 
 def obtener_conexion():
@@ -122,11 +142,15 @@ def calcular_indice_riesgo(alumno_id: int) -> dict:
     """Calcula el índice de riesgo de deserción (0 a 100), nivel de semáforo (ROJO, AMBAR o VERDE)
     y desglose por asistencia, notas, convivencia y biblioteca para un alumno específico.
     Usar cuando pregunten por el riesgo, semáforo o alerta de un estudiante por su ID."""
+    t0 = time.perf_counter()
     print(f"[MCP] calcular_indice_riesgo(alumno_id={alumno_id})")
     filas = consultar(f"{SQL_METRICAS} WHERE a.id = %s LIMIT 1", (alumno_id,))
     if not filas:
+        registrar_auditoria_mcp('calcular_indice_riesgo', {'alumno_id': alumno_id}, 'No encontrado', t0)
         return {'encontrado': False, 'mensaje': f'No existe ningún alumno con ID {alumno_id}.'}
-    return {'encontrado': True, **evaluar_fila(filas[0])}
+    res = {'encontrado': True, **evaluar_fila(filas[0])}
+    registrar_auditoria_mcp('calcular_indice_riesgo', {'alumno_id': alumno_id}, f"{res['nombre_completo']} → {res['indice_riesgo']} ({res['nivel_semaforo']})", t0)
+    return res
 
 
 @mcp.tool()
@@ -134,8 +158,10 @@ def listar_alumnos_en_riesgo(nivel: str = 'ROJO', rol_usuario: str = 'tutor') ->
     """Lista los estudiantes ordenados de mayor a menor índice de riesgo escolar.
     Permite filtrar por nivel: ROJO, AMBAR, VERDE o TODOS. Solo para rol tutor.
     Usar cuando pregunten qué alumnos están en riesgo, en alerta roja o necesitan atención urgente."""
+    t0 = time.perf_counter()
     print(f"[MCP] listar_alumnos_en_riesgo(nivel={nivel}, rol={rol_usuario})")
     if rol_usuario.lower() == 'padre':
+        registrar_auditoria_mcp('listar_alumnos_en_riesgo', {'nivel': nivel, 'rol': rol_usuario}, 'Acceso denegado (PROT-10)', t0)
         return {
             'autorizado': False,
             'mensaje': 'Por política de privacidad (PROT-10 / Ley 29733), un padre o apoderado no puede ver el listado global de alumnos en riesgo. Solo puede consultar el resumen de su propio hijo.',
@@ -159,6 +185,7 @@ def listar_alumnos_en_riesgo(nivel: str = 'ROJO', rol_usuario: str = 'tutor') ->
         }
         for x in evaluados[:15]
     ]
+    registrar_auditoria_mcp('listar_alumnos_en_riesgo', {'nivel': nivel_norm}, f"{len(resumen)} estudiantes devueltos", t0)
     return {'total': len(resumen), 'nivel_consultado': nivel_norm, 'alumnos': resumen}
 
 
@@ -167,6 +194,7 @@ def consultar_historial_academico(busqueda: str, rol_usuario: str = 'tutor') -> 
     """Busca un alumno por nombre, apellido o código (ej. Mateo, Lucas, EST-2026-003) y devuelve
     su perfil, notas por curso, faltas recientes, incidencias de convivencia, biblioteca e
     intervenciones tutoriales. Usar cuando pregunten por datos, notas, faltas o historial de un alumno."""
+    t0 = time.perf_counter()
     print(f"[MCP] consultar_historial_academico(busqueda={busqueda}, rol={rol_usuario})")
     patron = f"%{busqueda.strip()}%"
     alumnos = consultar(
@@ -175,6 +203,7 @@ def consultar_historial_academico(busqueda: str, rol_usuario: str = 'tutor') -> 
         (patron, patron),
     )
     if not alumnos:
+        registrar_auditoria_mcp('consultar_historial_academico', {'busqueda': busqueda}, 'Sin coincidencias', t0)
         return {'encontrado': False, 'mensaje': f'No se encontró ningún alumno que coincida con "{busqueda}".'}
 
     alumno = alumnos[0]
@@ -190,6 +219,7 @@ def consultar_historial_academico(busqueda: str, rol_usuario: str = 'tutor') -> 
     )
 
     if rol_usuario.lower() == 'padre':
+        registrar_auditoria_mcp('consultar_historial_academico', {'busqueda': busqueda, 'rol': 'padre'}, f"Resumen seguro: {alumno['nombre_completo']}", t0)
         return {
             'encontrado': True,
             'modo': 'resumen_apoderado',
@@ -213,6 +243,7 @@ def consultar_historial_academico(busqueda: str, rol_usuario: str = 'tutor') -> 
         "SELECT id, fecha, tutor_nombre, motivo, accion_acordada, estado FROM intervenciones_tutoriales WHERE alumno_id = %s ORDER BY fecha DESC LIMIT 5",
         (aid,),
     )
+    registrar_auditoria_mcp('consultar_historial_academico', {'busqueda': busqueda}, f"Perfil completo: {alumno['nombre_completo']}", t0)
     return {
         'encontrado': True,
         'alumno': alumno,
@@ -230,6 +261,7 @@ def consultar_protocolo_tutoria(tema: str) -> dict:
     """Busca en el reglamento interno, protocolos de tutoría y guías de alerta temprana del MINEDU
     según un tema o palabra clave (ej. '3 faltas', 'alerta roja', 'aislamiento', 'mensaje apoderado').
     Usar cuando pregunten qué dice el protocolo, reglamento o guía MINEDU."""
+    t0 = time.perf_counter()
     print(f"[MCP] consultar_protocolo_tutoria(tema={tema})")
     patron = f"%{tema.strip()}%"
     filas = consultar(
@@ -240,7 +272,10 @@ def consultar_protocolo_tutoria(tema: str) -> dict:
         (patron, patron, patron, patron),
     )
     if not filas:
+        registrar_auditoria_mcp('consultar_protocolo_tutoria', {'tema': tema}, 'Sin protocolos', t0)
         return {'encontrado': False, 'mensaje': f'No se hallaron protocolos sobre "{tema}".'}
+    codigos = ', '.join(f['codigo'] for f in filas)
+    registrar_auditoria_mcp('consultar_protocolo_tutoria', {'tema': tema}, f"Protocolos RAG: {codigos}", t0)
     return {'encontrado': True, 'protocolos': filas}
 
 
@@ -255,8 +290,10 @@ def registrar_intervencion_tutorial(
     """Registra una nueva intervención tutorial para un alumno en PostgreSQL.
     SOLO permitido para rol 'tutor' y SIEMPRE requiere confirmación previa (confirmado=False primero,
     y confirmado=True solo después de que el tutor confirme). Nunca borra ni modifica registros."""
+    t0 = time.perf_counter()
     print(f"[MCP] registrar_intervencion_tutorial(alumno_id={alumno_id}, rol={rol_usuario}, confirmado={confirmado})")
     if rol_usuario.lower() != 'tutor':
+        registrar_auditoria_mcp('registrar_intervencion_tutorial', {'alumno_id': alumno_id, 'rol': rol_usuario}, 'Escritura denegada (rol padre)', t0)
         return {
             'registrado': False,
             'autorizado': False,
@@ -267,6 +304,7 @@ def registrar_intervencion_tutorial(
         return {'registrado': False, 'mensaje': f'No existe alumno con ID {alumno_id}.'}
 
     if not confirmado:
+        registrar_auditoria_mcp('registrar_intervencion_tutorial', {'alumno_id': alumno_id, 'confirmado': False}, 'Esperando confirmación del tutor', t0)
         return {
             'registrado': False,
             'requiere_confirmacion': True,
@@ -289,6 +327,7 @@ def registrar_intervencion_tutorial(
             creado = dict(cur.fetchone())
         conn.commit()
 
+    registrar_auditoria_mcp('registrar_intervencion_tutorial', {'alumno_id': alumno_id, 'confirmado': True}, f"INSERT intervención #{creado['id']}", t0)
     return {
         'registrado': True,
         'intervencion_id': creado['id'],

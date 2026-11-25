@@ -58,6 +58,7 @@
             <button id="btn-rol-tutor" class="seg-btn active" type="button">Tutor / Docente</button>
             <button id="btn-rol-padre" class="seg-btn" type="button">Padre / Apoderado</button>
           </div>
+          <button id="btn-imprimir" class="btn btn-secondary" type="button">Exportar PDF</button>
           <a class="btn btn-dark" href="/semaforo.html" target="_blank" rel="noopener">Pantalla IoT ↗</a>
         </div>
       </header>
@@ -101,32 +102,56 @@
               </div>
             </div>
 
-            <!-- Barra visual de distribución -->
-            <div class="card">
-              <div class="card-head">
-                <div>
-                  <h2>Distribución Institucional del Semáforo</h2>
-                  <p>Cruce automático de 4 señales: Asistencia RFID (40), Notas (30), Convivencia (20) y Biblioteca (10)</p>
+            <!-- Analítica Institucional (Distribución + Riesgo por Grado) -->
+            <div class="analytics-grid">
+              <div class="card" style="margin-bottom:0;">
+                <div class="card-head">
+                  <div>
+                    <h2>Distribución Institucional del Semáforo</h2>
+                    <p>4 señales: Asistencia (40), Notas (30), Convivencia (20), Biblioteca (10)</p>
+                  </div>
                 </div>
+                <div class="dist-bar">
+                  <div id="bar-rojo" class="dist-seg-rojo" style="width: 0%"></div>
+                  <div id="bar-ambar" class="dist-seg-ambar" style="width: 0%"></div>
+                  <div id="bar-verde" class="dist-seg-verde" style="width: 0%"></div>
+                </div>
+                <div id="dist-legend" class="dist-legend">Cargando distribución...</div>
               </div>
-              <div class="dist-bar">
-                <div id="bar-rojo" class="dist-seg-rojo" style="width: 0%"></div>
-                <div id="bar-ambar" class="dist-seg-ambar" style="width: 0%"></div>
-                <div id="bar-verde" class="dist-seg-verde" style="width: 0%"></div>
+
+              <div class="card" style="margin-bottom:0;">
+                <div class="card-head">
+                  <div>
+                    <h2>Riesgo por Grado Académico</h2>
+                    <p>Mapa de calor de alertas (1ro a 5to Secundaria)</p>
+                  </div>
+                </div>
+                <div id="grade-chart" class="grade-chart"></div>
               </div>
-              <div id="dist-legend" class="dist-legend">Cargando distribución...</div>
             </div>
 
-            <!-- Factor Wow RFID -->
+            <!-- Factor Wow RFID + Consola Escáner Multi-Alumno -->
             <div class="card wow-banner">
-              <div>
-                <span class="wow-pill">● FACTOR WOW · SIMULADOR IoT RFID EN TIEMPO REAL</span>
-                <h2>Detección Temprana Automática de Deserción</h2>
-                <p>Simula 3 faltas consecutivas en el lector RFID de puerta + nota <strong>06</strong> en Matemática para <strong>Lucas Mendoza Paredes (ID 3)</strong>. El semáforo salta a <strong>ROJO (82)</strong> y SIGE-Bot redacta la alerta y el mensaje al apoderado.</p>
+              <div style="width:100%;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:14px;">
+                <div>
+                  <span class="wow-pill">● FACTOR WOW · SIMULADOR IoT RFID EN TIEMPO REAL</span>
+                  <h2>Detección Temprana Automática de Deserción</h2>
+                  <p>Simula 3 faltas consecutivas en el lector RFID de puerta + nota <strong>06</strong> en Matemática para <strong>Lucas Mendoza Paredes (ID 3)</strong>. El semáforo salta a <strong>ROJO (82)</strong> y SIGE-Bot redacta la alerta y el mensaje al apoderado.</p>
+                </div>
+                <div class="wow-actions">
+                  <button id="btn-simular-rfid" class="btn btn-danger" type="button">Simular 3 faltas RFID + Nota 06</button>
+                  <button id="btn-reset-demo" class="btn btn-secondary" type="button">Reiniciar demo</button>
+                </div>
               </div>
-              <div class="wow-actions">
-                <button id="btn-simular-rfid" class="btn btn-danger" type="button">Simular 3 faltas RFID + Nota 06</button>
-                <button id="btn-reset-demo" class="btn btn-secondary" type="button">Reiniciar demo</button>
+              <div class="rfid-console" style="width:100%;">
+                <span style="font-size:0.78rem;color:#94a3b8;font-weight:600;">Lector RFID manual:</span>
+                <select id="rfid-alumno" class="rfid-select" aria-label="Seleccionar estudiante"></select>
+                <select id="rfid-estado" class="rfid-select" aria-label="Estado RFID">
+                  <option value="PRESENTE">PRESENTE (Ingreso puntual)</option>
+                  <option value="TARDANZA">TARDANZA</option>
+                  <option value="FALTA">FALTA (Ausencia)</option>
+                </select>
+                <button id="btn-rfid-manual" class="btn btn-primary" type="button">Escanear Tarjeta RFID</button>
               </div>
             </div>
 
@@ -228,6 +253,17 @@
             <div class="bubble bubble-bot">
               <span class="bubble-meta">SIGE-Bot · IA Preventiva (Ley N.° 31814)</span>
               <span>Hola, soy el asistente de inteligencia artificial de SIGE-360. Consulto en tiempo real la base de datos escolar y los protocolos MINEDU para detectar riesgo de deserción y apoyar la tutoría.</span>
+            </div>
+          </div>
+
+          <!-- Rayos X MCP en Vivo -->
+          <div class="mcp-xray">
+            <div class="mcp-xray-head">
+              <span>⚡ RAYOS X · HERRAMIENTAS MCP EN VIVO</span>
+              <span id="mcp-count">0 llamadas</span>
+            </div>
+            <div id="mcp-xray-list" class="mcp-xray-list">
+              <div style="color:#94a3b8;">Haz una pregunta para ver qué herramienta MCP consulta PostgreSQL...</div>
             </div>
           </div>
 

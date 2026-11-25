@@ -57,8 +57,9 @@ async function enviarConsultaAlAgente(texto) {
     const datos = await r.json();
     cuerpoBot.previousSibling.textContent = 'SIGE-Bot · Respuesta verificada';
     renderTextoSeguro(cuerpoBot, datos.respuesta);
-    // Refrescar intervenciones por si el agente registró una nueva
+    // Refrescar intervenciones y Rayos X MCP
     cargarDashboard();
+    cargarMcpLogs();
   } catch (_err) {
     renderTextoSeguro(cuerpoBot, 'No se pudo conectar con el servidor. Intente nuevamente.');
   }
@@ -265,6 +266,8 @@ async function cargarDashboard() {
 
     alumnosCache = datos.alumnos || [];
     renderTablaAlumnos();
+    renderGraficoGrados(alumnosCache);
+    poblarSelectorRfid(alumnosCache);
     renderIntervenciones(datos.intervenciones || []);
   } catch (err) {
     errBox.textContent = err.message;
@@ -368,6 +371,7 @@ function actualizarChipsPorRol() {
         ['Alumnos en rojo', '¿Qué alumnos están en alerta roja hoy?'],
         ['Riesgo Mateo (ID 1)', 'Calcula el índice de riesgo del alumno con ID 1'],
         ['Protocolo 3 faltas', '¿Qué indica el protocolo MINEDU ante 3 faltas consecutivas?'],
+        ['Registrar intervención', 'Registra una intervención tutorial para Lucas Mendoza (ID 3) por seguimiento en Matemática con refuerzo los miércoles'],
       ]
     : [
         ['Resumen de mi hijo', 'Muéstrame el historial académico de Lucas Mendoza'],
@@ -470,3 +474,104 @@ document.getElementById('btn-reset-demo').addEventListener('click', async () => 
 
 actualizarChipsPorRol();
 cargarDashboard();
+
+// ==================== RAYOS X MCP, GRÁFICO POR GRADO Y ESCÁNER RFID ====================
+function renderGraficoGrados(alumnos) {
+  const cont = document.getElementById('grade-chart');
+  if (!cont) return;
+  cont.textContent = '';
+  const grados = ['1ro Secundaria', '2do Secundaria', '3ro Secundaria', '4to Secundaria', '5to Secundaria'];
+  grados.forEach((g) => {
+    const grupo = alumnos.filter((a) => a.grado === g);
+    const total = Math.max(1, grupo.length);
+    const r = grupo.filter((a) => a.nivel_semaforo === 'ROJO').length;
+    const am = grupo.filter((a) => a.nivel_semaforo === 'AMBAR').length;
+    const v = grupo.filter((a) => a.nivel_semaforo === 'VERDE').length;
+
+    const row = document.createElement('div');
+    row.className = 'grade-row';
+
+    const lbl = document.createElement('span');
+    lbl.className = 'grade-label';
+    lbl.textContent = g.replace('Secundaria', 'Sec.');
+
+    const track = document.createElement('div');
+    track.className = 'grade-bar-track';
+    [['dist-seg-rojo', r], ['dist-seg-ambar', am], ['dist-seg-verde', v]].forEach(([cls, cnt]) => {
+      const seg = document.createElement('div');
+      seg.className = cls;
+      seg.style.width = `${(cnt / total) * 100}%`;
+      track.appendChild(seg);
+    });
+
+    const cnt = document.createElement('span');
+    cnt.className = 'grade-count';
+    cnt.textContent = `${r}R · ${am}A`;
+
+    row.append(lbl, track, cnt);
+    cont.appendChild(row);
+  });
+}
+
+function poblarSelectorRfid(alumnos) {
+  const sel = document.getElementById('rfid-alumno');
+  if (!sel || sel.options.length > 0) return;
+  const ordenados = [...alumnos].sort((a, b) => a.alumno_id - b.alumno_id);
+  ordenados.forEach((a) => {
+    const opt = document.createElement('option');
+    opt.value = String(a.alumno_id);
+    opt.textContent = `${a.nombre_completo} (${a.codigo_rfid})`;
+    sel.appendChild(opt);
+  });
+}
+
+async function cargarMcpLogs() {
+  const list = document.getElementById('mcp-xray-list');
+  const cnt = document.getElementById('mcp-count');
+  if (!list) return;
+  try {
+    const r = await fetch('/api/mcp-logs');
+    const d = await r.json();
+    const logs = d.logs || [];
+    cnt.textContent = `${logs.length} llamadas`;
+    if (logs.length === 0) return;
+    list.textContent = '';
+    logs.slice(0, 5).forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'mcp-log-item';
+      const left = document.createElement('span');
+      const tool = document.createElement('span');
+      tool.className = 'mcp-log-tool';
+      tool.textContent = item.herramienta;
+      left.append(tool, document.createTextNode(` · ${item.resumen}`));
+      const right = document.createElement('span');
+      right.className = 'mcp-log-ms';
+      right.textContent = `${item.hora} (${item.ms}ms)`;
+      row.append(left, right);
+      list.appendChild(row);
+    });
+  } catch (_e) {
+    // silencioso
+  }
+}
+
+document.getElementById('btn-imprimir')?.addEventListener('click', () => window.print());
+
+document.getElementById('btn-rfid-manual')?.addEventListener('click', async () => {
+  const alumnoId = Number(document.getElementById('rfid-alumno').value);
+  const estado = document.getElementById('rfid-estado').value;
+  if (!alumnoId) return;
+  const r = await fetch('/api/rfid-scan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alumno_id: alumnoId, estado }),
+  });
+  const d = await r.json();
+  if (r.ok) {
+    await cargarDashboard();
+    agregarBurbuja('Lector RFID Puerta', d.mensaje, false);
+  }
+});
+
+cargarMcpLogs();
+setInterval(cargarMcpLogs, 5000);

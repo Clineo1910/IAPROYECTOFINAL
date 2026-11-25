@@ -6,6 +6,8 @@ function actualizarReloj() {
   });
 }
 
+let idsRojoPrevios = null;
+
 async function refrescarSemaforo() {
   try {
     const r = await fetch('/api/dashboard');
@@ -19,6 +21,20 @@ async function refrescarSemaforo() {
 
     const rojos = datos.alumnos.filter((a) => a.nivel_semaforo === 'ROJO');
     const ambars = datos.alumnos.filter((a) => a.nivel_semaforo === 'AMBAR');
+
+    const idsActuales = new Set(rojos.map((a) => a.alumno_id));
+    const banner = document.getElementById('iot-alert-banner');
+    const bannerTxt = document.getElementById('iot-alert-text');
+    if (idsRojoPrevios !== null) {
+      const nuevos = rojos.filter((a) => !idsRojoPrevios.has(a.alumno_id));
+      if (nuevos.length > 0 && banner && bannerTxt) {
+        bannerTxt.textContent = `🚨 NUEVA ALERTA ROJA DETECTADA POR RFID: ${nuevos.map((n) => `${n.nombre_completo} (Score ${n.indice_riesgo})`).join(', ')}`;
+        banner.hidden = false;
+      } else if (rojos.length <= 3 && banner) {
+        banner.hidden = true;
+      }
+    }
+    idsRojoPrevios = idsActuales;
 
     document.getElementById('cnt-rojo').textContent = `${rojos.length} casos`;
     document.getElementById('cnt-ambar').textContent = `${ambars.length} casos`;

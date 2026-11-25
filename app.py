@@ -1,6 +1,8 @@
 # app.py - Aplicación web SIGE-360 en Python (FastAPI + PostgreSQL + puente a n8n)
 import os
+import json
 import uuid
+from datetime import datetime
 import requests
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -12,6 +14,7 @@ from pydantic import BaseModel
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(RAIZ, '.env'))
+MCP_AUDIT_FILE = os.path.join(RAIZ, 'agente', 'mcp_audit.jsonl')
 
 N8N_WEBHOOK_URL = os.environ.get('N8N_WEBHOOK_URL', 'http://localhost:5678/webhook/agente')
 PORT = int(os.environ.get('PORT', '3060'))
@@ -139,6 +142,49 @@ class RolEntrada(BaseModel):
 
 class ChatEntrada(BaseModel):
     mensaje: str
+
+
+class RfidScanEntrada(BaseModel):
+    alumno_id: int
+    estado: str
+
+
+@app.get('/api/mcp-logs')
+def api_mcp_logs():
+    """Devuelve las últimas llamadas reales al servidor MCP (Rayos X del Agente)."""
+    if not os.path.exists(MCP_AUDIT_FILE):
+        return {'logs': []}
+    try:
+        with open(MCP_AUDIT_FILE, 'r', encoding='utf-8') as f:
+            lineas = [l.strip() for l in f if l.strip()]
+        eventos = [json.loads(l) for l in lineas[-12:]]
+        eventos.reverse()
+        return {'logs': eventos}
+    except Exception:
+        return {'logs': []}
+
+
+@app.post('/api/rfid-scan')
+def api_rfid_scan(entrada: RfidScanEntrada):
+    """Registra una lectura simulada del lector RFID de puerta para cualquier alumno."""
+    estado = entrada.estado.upper().strip()
+    if estado not in ('PRESENTE', 'TARDANZA', 'FALTA'):
+        return JSONResponse({'error': 'Estado RFID inválido'}, status_code=400)
+    ahora = datetime.now()
+    hora_rfid = None if estado == 'FALTA' else ahora.strftime('%H:%M:%S')
+    try:
+        with obtener_conexion() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO asistencia (alumno_id, fecha, estado, hora_rfid, origen)
+                       VALUES (%s, %s, %s, %s, 'RFID_PUERTA')""",
+                    (entrada.alumno_id, ahora.strftime('%Y-%m-%d'), estado, hora_rfid),
+                )
+            conn.commit()
+        return {'ok': True, 'mensaje': f'Lectura RFID registrada: alumno ID {entrada.alumno_id} → {estado}.'}
+    except Exception as exc:
+        print('[APP] Error escáner RFID:', exc)
+        return JSONResponse({'error': 'No se pudo registrar lectura RFID'}, status_code=500)
 
 
 @app.get('/api/sesion')

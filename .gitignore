@@ -1,6 +1,7 @@
 # Claves y configuraciones locales (NO subir a GitHub)
 .env
 agente/.env
+agente/mcp_audit.jsonl
 config.php
 
 # Entornos y temporales de Python
