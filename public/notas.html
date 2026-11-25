@@ -47,8 +47,8 @@
                 <select id="acta-bimestre">
                   <option value="1">Bimestre 1 (Completo)</option>
                   <option value="2">Bimestre 2 (Completo)</option>
-                  <option value="3" selected>Bimestre 3 (Unidad 3 · En curso)</option>
-                  <option value="4">Bimestre 4 (Por iniciar)</option>
+                  <option value="3" selected>Bimestre 3 (Completo)</option>
+                  <option value="4">Bimestre 4 (Completo)</option>
                 </select>
               </div>
               <button id="btn-guardar-acta" type="button" class="btn btn-primary">Guardar Acta del Curso</button>
@@ -148,10 +148,21 @@
         : 'Promedio del aula: --';
     }
 
-    function notasUnidad3(aid, curso, base) {
+    function notasCompletasSimuladas(aid, curso, bim, base) {
       const cl = (v) => Math.max(0, Math.min(20, Math.round(v)));
-      const s = (aid * 7 + curso.length * 3) % 5;
-      return { n1: cl(base + (s % 2 === 0 ? 1 : -1)), n2: cl(base + (s >= 3 ? -1 : 0)), n3: cl(base), n4: null, parcial: cl(base), final: null };
+      const s = (aid * 7 + curso.length * 3 + bim * 5) % 5;
+      const d1 = s % 2 === 0 ? 1 : -1;
+      const d2 = s >= 3 ? -1 : 1;
+      const d3 = s % 2 === 0 ? -1 : 0;
+      const d4 = -(d1 + d2 + d3);
+      return {
+        n1: cl(base + d1),
+        n2: cl(base + d2),
+        n3: cl(base + d3),
+        n4: cl(base + d4),
+        parcial: cl(base + (s % 2 === 0 ? 0 : -1)),
+        final: cl(base + (s % 2 === 0 ? 0 : 1)),
+      };
     }
 
     function renderActa() {
@@ -165,9 +176,7 @@
       lista.forEach((a) => {
         const ex = notasCache.find((n) => n.alumno_id === a.alumno_id && n.curso === curso && Number(n.bimestre) === bim);
         const ref = ex ? Number(ex.nota) : (a.metricas.promedio_notas ?? 14);
-        const vals = bim === 3
-          ? notasUnidad3(a.alumno_id, curso, ref)
-          : (ex ? { n1: ref, n2: ref, n3: ref, n4: ref, parcial: ref, final: ref } : { n1: null, n2: null, n3: null, n4: null, parcial: null, final: null });
+        const vals = notasCompletasSimuladas(a.alumno_id, curso, bim, ref);
 
         const tr = document.createElement('tr');
         tr.dataset.alumnoId = String(a.alumno_id);
