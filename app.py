@@ -19,24 +19,6 @@ MCP_AUDIT_FILE = os.path.join(RAIZ, 'agente', 'mcp_audit.jsonl')
 N8N_WEBHOOK_URL = os.environ.get('N8N_WEBHOOK_URL', 'http://localhost:5678/webhook/agente')
 PORT = int(os.environ.get('PORT', '3060'))
 
-# Cuentas demo con roles y permisos diferenciados (datos 100% simulados)
-USUARIOS_DEMO = {
-    'docente@sige360.edu.pe': {
-        'password': 'docente2026',
-        'rol': 'tutor',
-        'nombre': 'Prof. Ana Salas',
-        'cargo': 'Tutora Académica · 3ro–5to Sec.',
-        'alumno_id': None,
-    },
-    'padre@sige360.edu.pe': {
-        'password': 'padre2026',
-        'rol': 'padre',
-        'nombre': 'Elena Paredes (Demo)',
-        'cargo': 'Apoderada de Lucas Mendoza Paredes (4to Sec. B)',
-        'alumno_id': 3,
-    },
-}
-
 # Sesiones activas en memoria: sid -> dict(email, rol, nombre, cargo, alumno_id)
 SESIONES: dict[str, dict] = {}
 
@@ -217,17 +199,35 @@ class IntervencionEstadoEntrada(BaseModel):
     estado: str
 
 
-# ==================== AUTENTICACIÓN ====================
+class UsuarioNuevoEntrada(BaseModel):
+    email: str
+    password: str
+    rol: str = 'padre'
+    nombre: str
+    alumno_id: int | None = None
+
+
+class AlertaTelegramEntrada(BaseModel):
+    alumno_id: int | None = None
+    mensaje: str
+
+
+# ==================== AUTENTICACIÓN (DESDE POSTGRESQL) ====================
 @app.post('/api/login')
 def api_login(entrada: LoginEntrada, response: Response):
     email = entrada.email.strip().lower()
-    cuenta = USUARIOS_DEMO.get(email)
-    if not cuenta or cuenta['password'] != entrada.password:
+    filas = consultar(
+        "SELECT id, email, password, rol, nombre, cargo, alumno_id FROM usuarios WHERE LOWER(email) = %s LIMIT 1",
+        (email,),
+    )
+    if not filas or filas[0]['password'] != entrada.password:
         return JSONResponse({'error': 'Correo o contraseña incorrectos.'}, status_code=401)
 
+    cuenta = filas[0]
     sid = uuid.uuid4().hex
     SESIONES[sid] = {
-        'email': email,
+        'id': cuenta['id'],
+        'email': cuenta['email'],
         'rol': cuenta['rol'],
         'nombre': cuenta['nombre'],
         'cargo': cuenta['cargo'],
@@ -280,6 +280,10 @@ def api_mi_hijo(request: Request):
             "SELECT fecha, tutor_nombre, accion_acordada, estado FROM intervenciones_tutoriales WHERE alumno_id = %s ORDER BY id DESC LIMIT 5",
             (alumno_id,),
         )
+        alertas = consultar(
+            "SELECT fecha, canal, mensaje, detalle_estado FROM alertas_enviadas WHERE alumno_id = %s OR alumno_id IS NULL ORDER BY id DESC LIMIT 5",
+            (alumno_id,),
+        )
         return {
             'apoderado': user['nombre'],
             'alumno': {
@@ -296,6 +300,7 @@ def api_mi_hijo(request: Request):
             'notas': notas,
             'asistencia': asistencia,
             'avisos_tutor': avisos,
+            'alertas_recibidas': alertas,
         }
     except Exception as exc:
         print('[APP] Error /api/mi-hijo:', exc)
@@ -673,7 +678,10 @@ def api_chat(entrada: ChatEntrada, request: Request):
 
     rol = user['rol']
     if rol == 'padre':
-        mensaje_enviado = f"(Apoderado autenticado: {user['nombre']}, solo autorizado para su hijo Lucas Mendoza Paredes ID 3) {mensaje}"
+        aid = user.get('alumno_id') or 3
+        al = consultar("SELECT nombre_completo FROM alumnos WHERE id = %s LIMIT 1", (aid,))
+        nom_hijo = al[0]['nombre_completo'] if al else f'ID {aid}'
+        mensaje_enviado = f"(Apoderado autenticado: {user['nombre']}, solo autorizado para su hijo {nom_hijo} ID {aid}) {mensaje}"
     else:
         mensaje_enviado = mensaje
 
@@ -694,18 +702,148 @@ def api_chat(entrada: ChatEntrada, request: Request):
         return {'respuesta': 'El asistente no está disponible. Verifique que n8n y el servidor MCP estén encendidos.'}
 
 
-# ==================== RUTAS PROTEGIDAS DE PÁGINAS ====================
+# ==================== USUARIOS (CUENTAS DE PADRES Y DOCENTES) ====================
+@app.get('/api/usuarios')
+def api_listar_usuarios(request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    filas = consultar(
+        """SELECT u.id, u.email, u.rol, u.nombre, u.cargo, u.alumno_id, a.nombre_completo AS alumno_nombre
+           FROM usuarios u LEFT JOIN alumnos a ON a.id = u.alumno_id
+           ORDER BY u.id DESC LIMIT 50"""
+    )
+    return {'usuarios': filas}
+
+
+@app.post('/api/usuarios')
+def api_crear_usuario(entrada: UsuarioNuevoEntrada, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    email = entrada.email.strip().lower()
+    rol = entrada.rol.strip().lower()
+    if '@' not in email or len(entrada.password) < 4 or rol not in ('padre', 'tutor'):
+        return JSONResponse({'error': 'Correo válido, contraseña (mín. 4 caracteres) y rol requeridos.'}, status_code=400)
+    if rol == 'padre' and not entrada.alumno_id:
+        return JSONResponse({'error': 'Para crear una cuenta de padre debes seleccionar a su hijo/a.'}, status_code=400)
+
+    cargo = 'Docente / Tutor SIGE-360'
+    if rol == 'padre':
+        al = consultar("SELECT nombre_completo, grado, seccion FROM alumnos WHERE id = %s LIMIT 1", (entrada.alumno_id,))
+        if not al:
+            return JSONResponse({'error': 'Estudiante no encontrado.'}, status_code=404)
+        cargo = f"Apoderado de {al[0]['nombre_completo']} ({al[0]['grado']} {al[0]['seccion']})"
+
+    try:
+        with obtener_conexion() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """INSERT INTO usuarios (email, password, rol, nombre, cargo, alumno_id)
+                       VALUES (%s, %s, %s, %s, %s, %s) RETURNING id, email, rol, nombre, cargo""",
+                    (email, entrada.password, rol, entrada.nombre.strip(), cargo, entrada.alumno_id if rol == 'padre' else None),
+                )
+                creado = dict(cur.fetchone())
+            conn.commit()
+        return {'ok': True, 'usuario': creado, 'mensaje': f'Cuenta creada ({email} · rol {rol}). Ya puede iniciar sesión en /login.html.'}
+    except Exception as exc:
+        print('[APP] Error creando usuario:', exc)
+        return JSONResponse({'error': 'Ese correo ya está registrado o hubo un error al guardar.'}, status_code=400)
+
+
+# ==================== ALERTAS TELEGRAM (API EXTERNA GRATIS - PASO 5) ====================
+@app.post('/api/alertas/telegram')
+def api_enviar_telegram(entrada: AlertaTelegramEntrada, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    texto = entrada.mensaje.strip()
+    if not texto:
+        return JSONResponse({'error': 'El mensaje no puede estar vacío.'}, status_code=400)
+
+    # Recarga .env por si el usuario acaba de pegar su token de @BotFather
+    load_dotenv(os.path.join(RAIZ, '.env'), override=True)
+    token = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
+    chat_id = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
+
+    enviado_externo = False
+    detalle = 'Guardado en Portal de Padres (configura TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en .env para envío al celular).'
+
+    if token and chat_id:
+        try:
+            r = requests.post(
+                f'https://api.telegram.org/bot{token}/sendMessage',
+                json={'chat_id': chat_id, 'text': f'🏫 SIGE-360 · Alerta al Apoderado\n\n{texto}'},
+                timeout=10,
+            )
+            r.raise_for_status()
+            enviado_externo = True
+            detalle = 'Enviado en vivo por Telegram Bot API y publicado en Portal de Padres.'
+        except Exception as exc:
+            print('[TELEGRAM] Error:', exc)
+            detalle = 'Guardado en Portal de Padres (Telegram no respondió; verifica tu token/chat_id en .env).'
+
+    try:
+        with obtener_conexion() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO alertas_enviadas (alumno_id, canal, mensaje, enviado_externo, detalle_estado)
+                       VALUES (%s, 'TELEGRAM', %s, %s, %s)""",
+                    (entrada.alumno_id, texto[:1500], enviado_externo, detalle),
+                )
+            conn.commit()
+    except Exception as exc:
+        print('[APP] Error guardando alerta:', exc)
+
+    return {'ok': True, 'enviado_telegram': enviado_externo, 'mensaje': detalle}
+
+
+# ==================== RUTAS PROTEGIDAS DE PÁGINAS (MULTIPÁGINA REAL) ====================
 PUBLIC_DIR = os.path.join(RAIZ, 'public')
 
 
-@app.get('/')
-def servir_docente(request: Request):
+def servir_pagina_docente(request: Request, archivo: str):
     _, user = obtener_usuario_actual(request)
     if not user:
         return RedirectResponse('/login.html', status_code=302)
     if user['rol'] == 'padre':
         return RedirectResponse('/padres.html', status_code=302)
-    return FileResponse(os.path.join(PUBLIC_DIR, 'index.html'))
+    return FileResponse(os.path.join(PUBLIC_DIR, archivo))
+
+
+@app.get('/')
+def ruta_inicio(request: Request):
+    return servir_pagina_docente(request, 'index.html')
+
+
+@app.get('/notas.html')
+def ruta_notas(request: Request):
+    return servir_pagina_docente(request, 'notas.html')
+
+
+@app.get('/convivencia.html')
+def ruta_convivencia(request: Request):
+    return servir_pagina_docente(request, 'convivencia.html')
+
+
+@app.get('/biblioteca.html')
+def ruta_biblioteca(request: Request):
+    return servir_pagina_docente(request, 'biblioteca.html')
+
+
+@app.get('/intervenciones.html')
+def ruta_intervenciones(request: Request):
+    return servir_pagina_docente(request, 'intervenciones.html')
+
+
+@app.get('/usuarios.html')
+def ruta_usuarios(request: Request):
+    return servir_pagina_docente(request, 'usuarios.html')
+
+
+@app.get('/protocolos.html')
+def ruta_protocolos(request: Request):
+    return servir_pagina_docente(request, 'protocolos.html')
 
 
 @app.get('/padres.html')

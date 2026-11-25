@@ -119,6 +119,26 @@ async function cargarPortalPadre() {
 
   const avisosEl = document.getElementById('lista-avisos-tutor');
   avisosEl.textContent = '';
+  (d.alertas_recibidas || []).forEach((al) => {
+    const box = document.createElement('div');
+    box.className = 'protocol-card';
+    box.style.borderColor = '#93c5fd';
+    box.style.background = '#eff6ff';
+    const top = document.createElement('div');
+    top.style.display = 'flex';
+    top.style.justifyContent = 'space-between';
+    const tut = document.createElement('strong');
+    tut.textContent = `✈ Alerta ${al.canal}`;
+    const est = document.createElement('span');
+    est.className = 'badge badge-GENERAL';
+    est.textContent = String(al.fecha).slice(0, 10);
+    top.append(tut, est);
+    const p = document.createElement('p');
+    p.style.marginTop = '6px';
+    p.textContent = al.mensaje;
+    box.append(top, p);
+    avisosEl.appendChild(box);
+  });
   (d.avisos_tutor || []).forEach((av) => {
     const box = document.createElement('div');
     box.className = 'protocol-card';

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGE-360 | Intervenciones Tutoriales</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="sige-sidebar" class="sidebar"></aside>
+    <div class="main-area">
+      <header id="sige-topbar" class="topbar"></header>
+      <main class="workspace">
+        <section class="content-col">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Registro de Intervenciones Tutoriales</h2>
+                <p>Única tabla con permiso INSERT para SIGE-Bot (previa confirmación humana). Puedes avanzar estados o notificar por Telegram.</p>
+              </div>
+              <button id="btn-refrescar" class="btn btn-secondary" type="button">Actualizar</button>
+            </div>
+            <div id="toast-int" class="toast-ok" hidden></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>ID</th><th>Estudiante</th><th>Tutor</th><th>Motivo</th><th>Acción Acordada</th><th>Estado</th><th>Acciones</th></tr>
+                </thead>
+                <tbody id="tabla-intervenciones"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        <aside id="sige-chat-panel" class="chat-panel"></aside>
+      </main>
+    </div>
+  </div>
+
+  <script src="/layout.js"></script>
+  <script>
+    async function cargar() {
+      const r = await fetch('/api/dashboard');
+      const lista = (await r.json()).intervenciones || [];
+      const tbody = document.getElementById('tabla-intervenciones');
+      tbody.textContent = '';
+      lista.forEach((item) => {
+        const tr = document.createElement('tr');
+        [`#${item.id}`, `${item.nombre_completo} (${item.grado} ${item.seccion})`, item.tutor_nombre, item.motivo, item.accion_acordada].forEach((v) => {
+          const td = document.createElement('td'); td.textContent = String(v); tr.appendChild(td);
+        });
+        const tdE = document.createElement('td');
+        const b = document.createElement('span'); b.className = `badge badge-${item.estado}`; b.textContent = item.estado;
+        tdE.appendChild(b); tr.appendChild(tdE);
+
+        const tdAcc = document.createElement('td');
+        tdAcc.style.display = 'flex'; tdAcc.style.gap = '6px'; tdAcc.style.flexWrap = 'wrap';
+        const sig = item.estado === 'PROGRAMADA' ? 'SEGUIMIENTO' : (item.estado === 'SEGUIMIENTO' ? 'REALIZADA' : null);
+        if (sig) {
+          const b1 = document.createElement('button'); b1.type = 'button'; b1.className = 'btn btn-secondary btn-xs'; b1.textContent = `→ ${sig}`;
+          b1.addEventListener('click', async () => {
+            await fetch(`/api/intervenciones/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: sig }) });
+            cargar();
+          });
+          tdAcc.appendChild(b1);
+        }
+        const bTg = document.createElement('button'); bTg.type = 'button'; bTg.className = 'btn btn-primary btn-xs'; bTg.textContent = '✈ Telegram';
+        bTg.addEventListener('click', async () => {
+          const resp = await fetch('/api/alertas/telegram', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ alumno_id: item.alumno_id, mensaje: `Seguimiento tutorial de ${item.nombre_completo}: ${item.motivo}. Acuerdo: ${item.accion_acordada}.` }),
+          });
+          const d = await resp.json();
+          window.SIGE.mostrarToast('toast-int', d.mensaje || 'Alerta enviada.');
+        });
+        tdAcc.appendChild(bTg);
+        tr.appendChild(tdAcc);
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('btn-refrescar').addEventListener('click', cargar);
+    window.onChatCompleted = cargar;
+    window.SIGE.iniciarLayout({ paginaActiva: 'intervenciones', titulo: 'Intervenciones Tutoriales' }).then(cargar);
+  </script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGE-360 | Protocolos MINEDU (RAG)</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="sige-sidebar" class="sidebar"></aside>
+    <div class="main-area">
+      <header id="sige-topbar" class="topbar"></header>
+      <main class="workspace">
+        <section class="content-col">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Base de Conocimiento — Protocolos Internos y Guías MINEDU (RAG)</h2>
+                <p>Consultada en vivo por SIGE-Bot mediante la herramienta MCP consultar_protocolo_tutoria</p>
+              </div>
+              <input id="buscar-protocolo" class="search-input" type="search" placeholder="Filtrar protocolos...">
+            </div>
+            <div id="grid-protocolos" class="protocol-grid"></div>
+          </div>
+        </section>
+        <aside id="sige-chat-panel" class="chat-panel"></aside>
+      </main>
+    </div>
+  </div>
+
+  <script src="/layout.js"></script>
+  <script>
+    let cache = [];
+    function render(q = '') {
+      const grid = document.getElementById('grid-protocolos');
+      grid.textContent = '';
+      const txt = q.toLowerCase().trim();
+      cache.filter((p) => !txt || p.titulo.toLowerCase().includes(txt) || p.contenido.toLowerCase().includes(txt) || p.codigo.toLowerCase().includes(txt)).forEach((p) => {
+        const card = document.createElement('div'); card.className = 'protocol-card';
+        const top = document.createElement('div'); top.style.display = 'flex'; top.style.justifyContent = 'space-between'; top.style.alignItems = 'center';
+        const cod = document.createElement('strong'); cod.style.fontSize = '0.78rem'; cod.textContent = `${p.codigo} · ${p.categoria}`;
+        const b = document.createElement('span'); b.className = `badge badge-${p.nivel_riesgo}`; b.textContent = p.nivel_riesgo;
+        top.append(cod, b);
+        const h3 = document.createElement('h3'); h3.textContent = p.titulo;
+        const desc = document.createElement('p'); desc.textContent = p.contenido;
+        card.append(top, h3, desc);
+        grid.appendChild(card);
+      });
+    }
+
+    document.getElementById('buscar-protocolo').addEventListener('input', (e) => render(e.target.value));
+    window.SIGE.iniciarLayout({ paginaActiva: 'protocolos', titulo: 'Protocolos MINEDU (RAG)' }).then(async () => {
+      const r = await fetch('/api/protocolos');
+      cache = (await r.json()).protocolos || [];
+      render();
+    });
+  </script>
+</body>
+</html>

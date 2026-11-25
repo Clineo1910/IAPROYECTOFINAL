@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGE-360 | Registro de Notas</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="sige-sidebar" class="sidebar"></aside>
+    <div class="main-area">
+      <header id="sige-topbar" class="topbar"></header>
+      <main class="workspace">
+        <section class="content-col">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Libreta Ponderada por Grado y Curso</h2>
+                <p>Bimestres 1, 2 y 3 poblados en PostgreSQL. Al escribir en N1–N4, Ex. Parcial o Ex. Final, la Nota Final se recalcula en vivo.</p>
+              </div>
+            </div>
+            <div class="form-grid" style="margin-bottom:14px;">
+              <div class="field">
+                <label for="acta-grado">Grado Académico</label>
+                <select id="acta-grado">
+                  <option value="1ro Secundaria">1ro Secundaria</option>
+                  <option value="2do Secundaria">2do Secundaria</option>
+                  <option value="3ro Secundaria" selected>3ro Secundaria</option>
+                  <option value="4to Secundaria">4to Secundaria</option>
+                  <option value="5to Secundaria">5to Secundaria</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="acta-curso">Curso</label>
+                <select id="acta-curso">
+                  <option value="Matemática">Matemática</option>
+                  <option value="Comunicación">Comunicación</option>
+                  <option value="Ciencia y Tecnología">Ciencia y Tecnología</option>
+                  <option value="Historia y Geografía">Historia y Geografía</option>
+                  <option value="Inglés">Inglés</option>
+                  <option value="Física">Física</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="acta-bimestre">Bimestre</label>
+                <select id="acta-bimestre">
+                  <option value="1">Bimestre 1 (Completo)</option>
+                  <option value="2">Bimestre 2 (Completo)</option>
+                  <option value="3" selected>Bimestre 3 (Unidad 3 · En curso)</option>
+                  <option value="4">Bimestre 4 (Por iniciar)</option>
+                </select>
+              </div>
+              <button id="btn-guardar-acta" type="button" class="btn btn-primary">Guardar Acta del Curso</button>
+            </div>
+
+            <div class="table-wrap">
+              <table class="acta-table">
+                <thead>
+                  <tr>
+                    <th>Estudiante</th>
+                    <th>Sec.</th>
+                    <th>N1</th>
+                    <th>N2</th>
+                    <th>N3</th>
+                    <th>N4</th>
+                    <th>Prom. Perm.<br><small>40%</small></th>
+                    <th>Ex. Parcial<br><small>30%</small></th>
+                    <th>Ex. Final<br><small>30%</small></th>
+                    <th>Nota Final</th>
+                  </tr>
+                </thead>
+                <tbody id="tabla-acta-grado"></tbody>
+              </table>
+            </div>
+            <div class="acta-footer">
+              <span id="acta-promedio-aula">Promedio del aula: --</span>
+              <span style="color:#64748b;font-weight:500;font-size:0.76rem;">Fórmula: Prom. Perm. (40%) + Ex. Parcial (30%) + Ex. Final (30%)</span>
+            </div>
+            <div id="toast-nota" class="toast-ok" hidden></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Historial de Calificaciones en PostgreSQL</h2>
+                <p>Filtrado por grado y curso</p>
+              </div>
+              <div class="toolbar">
+                <select id="filtro-notas-grado" class="search-input" style="width:165px;">
+                  <option value="TODOS">Todos los grados</option>
+                  <option value="1ro Secundaria">1ro Secundaria</option>
+                  <option value="2do Secundaria">2do Secundaria</option>
+                  <option value="3ro Secundaria">3ro Secundaria</option>
+                  <option value="4to Secundaria">4to Secundaria</option>
+                  <option value="5to Secundaria">5to Secundaria</option>
+                </select>
+                <select id="filtro-notas-curso" class="search-input" style="width:165px;">
+                  <option value="TODOS">Todos los cursos</option>
+                  <option value="Matemática">Matemática</option>
+                  <option value="Comunicación">Comunicación</option>
+                  <option value="Ciencia y Tecnología">Ciencia y Tecnología</option>
+                  <option value="Historia y Geografía">Historia y Geografía</option>
+                  <option value="Inglés">Inglés</option>
+                  <option value="Física">Física</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Estudiante</th><th>Grado</th><th>Curso</th><th>Bimestre</th><th>Nota</th><th>Fecha</th></tr>
+                </thead>
+                <tbody id="tabla-notas"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        <aside id="sige-chat-panel" class="chat-panel"></aside>
+      </main>
+    </div>
+  </div>
+
+  <script src="/layout.js"></script>
+  <script>
+    let alumnosCache = [];
+    let notasCache = [];
+
+    function recalcularFilaActa(tr) {
+      const num = (cls) => {
+        const v = tr.querySelector('.' + cls)?.value;
+        return v === '' || v === undefined ? 0 : Math.min(20, Math.max(0, Number(v)));
+      };
+      const tiene = ['g-n1','g-n2','g-n3','g-n4','g-parcial','g-final'].some((c) => tr.querySelector('.' + c)?.value !== '');
+      const promPerm = (num('g-n1') + num('g-n2') + num('g-n3') + num('g-n4')) / 4;
+      const notaFinal = Math.round(promPerm * 0.4 + num('g-parcial') * 0.3 + num('g-final') * 0.3);
+      tr.querySelector('.prom-cell').textContent = tiene ? promPerm.toFixed(2) : '-';
+      const b = tr.querySelector('.nota-final-badge');
+      if (!tiene) {
+        b.className = 'badge nota-final-badge'; b.textContent = '--'; tr.dataset.notaFinal = '';
+      } else {
+        b.className = 'badge nota-final-badge ' + (notaFinal < 11 ? 'badge-ROJO' : (notaFinal < 14 ? 'badge-AMBAR' : 'badge-VERDE'));
+        b.textContent = String(notaFinal); tr.dataset.notaFinal = String(notaFinal);
+      }
+      const vals = [...document.querySelectorAll('#tabla-acta-grado tr[data-alumno-id]')].map((r) => r.dataset.notaFinal).filter(Boolean).map(Number);
+      document.getElementById('acta-promedio-aula').textContent = vals.length
+        ? `Promedio del aula (${vals.length} alumnos): ${(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)}`
+        : 'Promedio del aula: --';
+    }
+
+    function notasUnidad3(aid, curso, base) {
+      const cl = (v) => Math.max(0, Math.min(20, Math.round(v)));
+      const s = (aid * 7 + curso.length * 3) % 5;
+      return { n1: cl(base + (s % 2 === 0 ? 1 : -1)), n2: cl(base + (s >= 3 ? -1 : 0)), n3: cl(base), n4: null, parcial: cl(base), final: null };
+    }
+
+    function renderActa() {
+      const tbody = document.getElementById('tabla-acta-grado');
+      const grado = document.getElementById('acta-grado').value;
+      const curso = document.getElementById('acta-curso').value;
+      const bim = Number(document.getElementById('acta-bimestre').value);
+      tbody.textContent = '';
+
+      const lista = alumnosCache.filter((a) => a.grado === grado).sort((a, b) => a.seccion.localeCompare(b.seccion) || a.nombre_completo.localeCompare(b.nombre_completo));
+      lista.forEach((a) => {
+        const ex = notasCache.find((n) => n.alumno_id === a.alumno_id && n.curso === curso && Number(n.bimestre) === bim);
+        const ref = ex ? Number(ex.nota) : (a.metricas.promedio_notas ?? 14);
+        const vals = bim === 3
+          ? notasUnidad3(a.alumno_id, curso, ref)
+          : (ex ? { n1: ref, n2: ref, n3: ref, n4: ref, parcial: ref, final: ref } : { n1: null, n2: null, n3: null, n4: null, parcial: null, final: null });
+
+        const tr = document.createElement('tr');
+        tr.dataset.alumnoId = String(a.alumno_id);
+        const tdN = document.createElement('td');
+        const st = document.createElement('strong'); st.textContent = a.nombre_completo;
+        const sm = document.createElement('small'); sm.style.display = 'block'; sm.style.color = '#64748b'; sm.textContent = a.codigo_estudiante;
+        tdN.append(st, sm); tr.appendChild(tdN);
+        const tdS = document.createElement('td'); tdS.textContent = a.seccion; tr.appendChild(tdS);
+
+        const mk = (cls, v, ph = '') => {
+          const td = document.createElement('td');
+          const inp = document.createElement('input');
+          inp.type = 'number'; inp.min = '0'; inp.max = '20'; inp.step = '0.5'; inp.className = 'grade-input ' + cls;
+          if (ph) inp.placeholder = ph;
+          if (v !== null) inp.value = String(v);
+          inp.addEventListener('input', () => recalcularFilaActa(tr));
+          td.appendChild(inp); return td;
+        };
+        tr.append(mk('g-n1', vals.n1), mk('g-n2', vals.n2), mk('g-n3', vals.n3), mk('g-n4', vals.n4, 'Pend.'));
+        const tdP = document.createElement('td'); tdP.className = 'prom-cell'; tr.appendChild(tdP);
+        tr.append(mk('g-parcial', vals.parcial), mk('g-final', vals.final, 'Pend.'));
+        const tdF = document.createElement('td');
+        const b = document.createElement('span'); b.className = 'badge nota-final-badge'; tdF.appendChild(b); tr.appendChild(tdF);
+
+        tbody.appendChild(tr);
+        recalcularFilaActa(tr);
+      });
+    }
+
+    function renderHistorial() {
+      const tbody = document.getElementById('tabla-notas');
+      const fg = document.getElementById('filtro-notas-grado').value;
+      const fc = document.getElementById('filtro-notas-curso').value;
+      tbody.textContent = '';
+      notasCache.filter((n) => (fg === 'TODOS' || n.grado === fg) && (fc === 'TODOS' || n.curso === fc)).slice(0, 60).forEach((n) => {
+        const tr = document.createElement('tr');
+        [n.nombre_completo, `${n.grado} ${n.seccion}`, n.curso, `Bim. ${n.bimestre}`].forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+        const tdN = document.createElement('td');
+        const b = document.createElement('span'); b.className = 'badge ' + (n.nota < 11 ? 'badge-ROJO' : (n.nota < 14 ? 'badge-AMBAR' : 'badge-VERDE')); b.textContent = Number(n.nota).toFixed(1);
+        tdN.appendChild(b); tr.appendChild(tdN);
+        const tdF = document.createElement('td'); tdF.textContent = String(n.fecha_registro).slice(0, 10); tr.appendChild(tdF);
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function cargarTodo() {
+      const [rd, rn] = await Promise.all([fetch('/api/dashboard'), fetch('/api/notas')]);
+      alumnosCache = (await rd.json()).alumnos || [];
+      notasCache = (await rn.json()).notas || [];
+      renderActa();
+      renderHistorial();
+    }
+
+    ['acta-grado','acta-curso','acta-bimestre'].forEach((id) => document.getElementById(id).addEventListener('change', renderActa));
+    ['filtro-notas-grado','filtro-notas-curso'].forEach((id) => document.getElementById(id).addEventListener('change', renderHistorial));
+
+    document.getElementById('btn-guardar-acta').addEventListener('click', async () => {
+      const curso = document.getElementById('acta-curso').value;
+      const bimestre = Number(document.getElementById('acta-bimestre').value);
+      const calificaciones = [...document.querySelectorAll('#tabla-acta-grado tr[data-alumno-id]')]
+        .filter((tr) => tr.dataset.notaFinal !== '')
+        .map((tr) => ({ alumno_id: Number(tr.dataset.alumnoId), nota: Number(tr.dataset.notaFinal) }));
+      const r = await fetch('/api/notas/lote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ curso, bimestre, calificaciones }) });
+      const d = await r.json();
+      if (r.ok) { window.SIGE.mostrarToast('toast-nota', d.mensaje); await cargarTodo(); }
+    });
+
+    window.SIGE.iniciarLayout({ paginaActiva: 'notas', titulo: 'Registro y Gestión de Calificaciones' }).then(cargarTodo);
+  </script>
+</body>
+</html>

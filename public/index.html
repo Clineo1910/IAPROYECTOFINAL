@@ -3,519 +3,130 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SIGE-360 | Plataforma de Inteligencia Escolar Predictiva</title>
+  <title>SIGE-360 | Panel Predictivo</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div class="app-shell">
-    <!-- Sidebar Institucional -->
-    <aside class="sidebar">
-      <div>
-        <div class="sidebar-brand">
-          <div class="brand-logo">360</div>
-          <div>
-            <h1>SIGE-360</h1>
-            <span>I.E. Demo · Año Escolar 2026</span>
-          </div>
-        </div>
-
-        <nav class="nav-section" aria-label="Navegación principal">
-          <div class="nav-label">Monitoreo</div>
-          <button type="button" class="nav-btn active" data-view="panel">
-            <span>Panel Predictivo</span>
-            <span id="nav-badge-rojo" class="nav-badge">0</span>
-          </button>
-          <button type="button" class="nav-btn" data-view="notas">
-            <span>Registro de Notas</span>
-          </button>
-          <button type="button" class="nav-btn" data-view="convivencia">
-            <span>Convivencia y Biblioteca</span>
-          </button>
-          <button type="button" class="nav-btn" data-view="intervenciones">
-            <span>Intervenciones Tutoriales</span>
-          </button>
-          <button type="button" class="nav-btn" data-view="alumnos">
-            <span>Matrícula de Alumnos</span>
-          </button>
-          <button type="button" class="nav-btn" data-view="protocolos">
-            <span>Protocolos MINEDU (RAG)</span>
-          </button>
-
-          <div class="nav-label" style="margin-top: 12px;">IoT / Sala de Profesores</div>
-          <a class="nav-btn" href="/semaforo.html" target="_blank" rel="noopener">
-            <span>Pantalla Semáforo en Vivo ↗</span>
-          </a>
-        </nav>
-      </div>
-
-      <div class="sidebar-footer">
-        <strong>Cumplimiento Normativo</strong>
-        Datos 100% simulados (Ley N.° 29733). Asistente IA transparente (Ley N.° 31814). Motor MCP Python + PostgreSQL + n8n.
-      </div>
-    </aside>
-
-    <!-- Área Principal -->
+    <aside id="sige-sidebar" class="sidebar"></aside>
     <div class="main-area">
-      <header class="topbar">
-        <div class="topbar-left">
-          <h2 id="topbar-title" class="page-title">Panel Predictivo de Riesgo Escolar</h2>
-          <span class="live-badge"><span class="pulse-dot"></span> PostgreSQL + MCP Activo</span>
-        </div>
-
-        <div class="topbar-right">
-          <span id="usuario-activo-pill" class="badge badge-GENERAL">Docente · Prof. Ana Salas</span>
-          <button id="btn-imprimir" class="btn btn-secondary" type="button">Exportar PDF</button>
-          <a class="btn btn-dark" href="/semaforo.html" target="_blank" rel="noopener">Pantalla IoT ↗</a>
-          <button id="btn-logout-docente" class="btn btn-secondary" type="button">Cerrar sesión</button>
-        </div>
-      </header>
-
+      <header id="sige-topbar" class="topbar"></header>
       <main class="workspace">
         <section class="content-col">
-          <!-- VISTA 1: PANEL GENERAL -->
-          <div id="view-panel">
-            <div class="kpi-grid">
-              <div class="kpi kpi-total">
-                <div class="kpi-head">
-                  <span class="kpi-title">Estudiantes Monitoreados</span>
-                  <span class="kpi-icon">∑</span>
-                </div>
-                <div id="kpi-total" class="kpi-val">--</div>
-                <div id="kpi-prom-riesgo" class="kpi-sub">Índice promedio: --</div>
-              </div>
-              <div class="kpi kpi-rojo">
-                <div class="kpi-head">
-                  <span class="kpi-title">Alerta Roja (≥ 60)</span>
-                  <span class="kpi-icon">!</span>
-                </div>
-                <div id="kpi-rojo" class="kpi-val">--</div>
-                <div class="kpi-sub">Atención tutorial &lt; 24h</div>
-              </div>
-              <div class="kpi kpi-ambar">
-                <div class="kpi-head">
-                  <span class="kpi-title">Alerta Ámbar (30–59)</span>
-                  <span class="kpi-icon">▲</span>
-                </div>
-                <div id="kpi-ambar" class="kpi-val">--</div>
-                <div class="kpi-sub">Seguimiento preventivo</div>
-              </div>
-              <div class="kpi kpi-verde">
-                <div class="kpi-head">
-                  <span class="kpi-title">Estado Verde (&lt; 30)</span>
-                  <span class="kpi-icon">✓</span>
-                </div>
-                <div id="kpi-verde" class="kpi-val">--</div>
-                <div class="kpi-sub">Trayectoria estable</div>
-              </div>
+          <div class="kpi-grid">
+            <div class="kpi kpi-total">
+              <div class="kpi-head"><span class="kpi-title">Estudiantes Monitoreados</span><span class="kpi-icon">∑</span></div>
+              <div id="kpi-total" class="kpi-val">--</div>
+              <div id="kpi-prom-riesgo" class="kpi-sub">Índice promedio: --</div>
             </div>
-
-            <!-- Analítica Institucional (Distribución + Riesgo por Grado) -->
-            <div class="analytics-grid">
-              <div class="card" style="margin-bottom:0;">
-                <div class="card-head">
-                  <div>
-                    <h2>Distribución Institucional del Semáforo</h2>
-                    <p>4 señales: Asistencia (40), Notas (30), Convivencia (20), Biblioteca (10)</p>
-                  </div>
-                </div>
-                <div class="dist-bar">
-                  <div id="bar-rojo" class="dist-seg-rojo" style="width: 0%"></div>
-                  <div id="bar-ambar" class="dist-seg-ambar" style="width: 0%"></div>
-                  <div id="bar-verde" class="dist-seg-verde" style="width: 0%"></div>
-                </div>
-                <div id="dist-legend" class="dist-legend">Cargando distribución...</div>
-              </div>
-
-              <div class="card" style="margin-bottom:0;">
-                <div class="card-head">
-                  <div>
-                    <h2>Riesgo por Grado Académico</h2>
-                    <p>Mapa de calor de alertas (1ro a 5to Secundaria)</p>
-                  </div>
-                </div>
-                <div id="grade-chart" class="grade-chart"></div>
-              </div>
+            <div class="kpi kpi-rojo">
+              <div class="kpi-head"><span class="kpi-title">Alerta Roja (≥ 60)</span><span class="kpi-icon">!</span></div>
+              <div id="kpi-rojo" class="kpi-val">--</div>
+              <div class="kpi-sub">Atención tutorial &lt; 24h</div>
             </div>
-
-            <!-- Factor Wow RFID + Consola Escáner Multi-Alumno -->
-            <div class="card wow-banner">
-              <div style="width:100%;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:14px;">
-                <div>
-                  <span class="wow-pill">● FACTOR WOW · SIMULADOR IoT RFID EN TIEMPO REAL</span>
-                  <h2>Detección Temprana Automática de Deserción</h2>
-                  <p>Simula 3 faltas consecutivas en el lector RFID de puerta + nota <strong>06</strong> en Matemática para <strong>Lucas Mendoza Paredes (ID 3)</strong>. El semáforo salta a <strong>ROJO (82)</strong> y SIGE-Bot redacta la alerta y el mensaje al apoderado.</p>
-                </div>
-                <div class="wow-actions">
-                  <button id="btn-simular-rfid" class="btn btn-danger" type="button">Simular 3 faltas RFID + Nota 06</button>
-                  <button id="btn-reset-demo" class="btn btn-secondary" type="button">Reiniciar demo</button>
-                </div>
-              </div>
-              <div class="rfid-console" style="width:100%;">
-                <span style="font-size:0.78rem;color:#94a3b8;font-weight:600;">Lector RFID manual:</span>
-                <select id="rfid-alumno" class="rfid-select" aria-label="Seleccionar estudiante"></select>
-                <select id="rfid-estado" class="rfid-select" aria-label="Estado RFID">
-                  <option value="PRESENTE">PRESENTE (Ingreso puntual)</option>
-                  <option value="TARDANZA">TARDANZA</option>
-                  <option value="FALTA">FALTA (Ausencia)</option>
-                </select>
-                <button id="btn-rfid-manual" class="btn btn-primary" type="button">Escanear Tarjeta RFID</button>
-              </div>
+            <div class="kpi kpi-ambar">
+              <div class="kpi-head"><span class="kpi-title">Alerta Ámbar (30–59)</span><span class="kpi-icon">▲</span></div>
+              <div id="kpi-ambar" class="kpi-val">--</div>
+              <div class="kpi-sub">Seguimiento preventivo</div>
             </div>
-
-            <!-- Tabla de Alumnos -->
-            <div class="card">
-              <div class="card-head">
-                <div>
-                  <h2>Semáforo Predictivo de Estudiantes</h2>
-                  <p>Haz clic en cualquier estudiante para abrir su Ficha 360° completa</p>
-                </div>
-                <div class="toolbar">
-                  <input id="buscar-alumno" class="search-input" type="search" placeholder="Buscar por nombre o código...">
-                  <button type="button" class="filter-pill active" data-filter="TODOS">Todos</button>
-                  <button type="button" class="filter-pill" data-filter="ROJO">Rojo</button>
-                  <button type="button" class="filter-pill" data-filter="AMBAR">Ámbar</button>
-                  <button type="button" class="filter-pill" data-filter="VERDE">Verde</button>
-                </div>
-              </div>
-
-              <div id="db-error" class="badge badge-ROJO" hidden style="margin-bottom:10px;"></div>
-
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Estudiante</th>
-                      <th>Grado</th>
-                      <th>Promedio</th>
-                      <th>Faltas</th>
-                      <th>Índice de Riesgo</th>
-                      <th>Semáforo</th>
-                    </tr>
-                  </thead>
-                  <tbody id="tabla-alumnos">
-                    <tr><td colspan="6" style="text-align:center;color:#64748b;">Cargando datos desde PostgreSQL...</td></tr>
-                  </tbody>
-                </table>
-              </div>
+            <div class="kpi kpi-verde">
+              <div class="kpi-head"><span class="kpi-title">Estado Verde (&lt; 30)</span><span class="kpi-icon">✓</span></div>
+              <div id="kpi-verde" class="kpi-val">--</div>
+              <div class="kpi-sub">Trayectoria estable</div>
             </div>
           </div>
 
-          <!-- VISTA 2: REGISTRO DE NOTAS (ACTA POR GRADO Y CURSO) -->
-          <div id="view-notas" hidden>
-            <div class="card">
+          <div class="analytics-grid">
+            <div class="card" style="margin-bottom:0;">
               <div class="card-head">
                 <div>
-                  <h2>Registro Auxiliar de Calificaciones por Grado y Curso</h2>
-                  <p>Selecciona el grado, curso y bimestre para calificar al aula completa. Al guardar, se recalcula el semáforo predictivo en PostgreSQL.</p>
+                  <h2>Distribución Institucional del Semáforo</h2>
+                  <p>4 señales: Asistencia (40), Notas (30), Convivencia (20), Biblioteca (10)</p>
                 </div>
               </div>
-              <div class="form-grid" style="margin-bottom:14px;">
-                <div class="field">
-                  <label for="acta-grado">Grado Académico</label>
-                  <select id="acta-grado">
-                    <option value="1ro Secundaria">1ro Secundaria</option>
-                    <option value="2do Secundaria">2do Secundaria</option>
-                    <option value="3ro Secundaria" selected>3ro Secundaria</option>
-                    <option value="4to Secundaria">4to Secundaria</option>
-                    <option value="5to Secundaria">5to Secundaria</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="acta-curso">Curso</label>
-                  <select id="acta-curso">
-                    <option value="Matemática">Matemática</option>
-                    <option value="Comunicación">Comunicación</option>
-                    <option value="Ciencia y Tecnología">Ciencia y Tecnología</option>
-                    <option value="Historia y Geografía">Historia y Geografía</option>
-                    <option value="Inglés">Inglés</option>
-                    <option value="Física">Física</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="acta-bimestre">Bimestre</label>
-                  <select id="acta-bimestre">
-                    <option value="1">Bimestre 1</option>
-                    <option value="2">Bimestre 2</option>
-                    <option value="3" selected>Bimestre 3 (Unidad 3 · En curso)</option>
-                    <option value="4">Bimestre 4</option>
-                  </select>
-                </div>
-                <button id="btn-guardar-acta" type="button" class="btn btn-primary">Guardar Acta del Curso</button>
+              <div class="dist-bar">
+                <div id="bar-rojo" class="dist-seg-rojo" style="width:0%"></div>
+                <div id="bar-ambar" class="dist-seg-ambar" style="width:0%"></div>
+                <div id="bar-verde" class="dist-seg-verde" style="width:0%"></div>
               </div>
-
-              <div class="table-wrap">
-                <table class="acta-table">
-                  <thead>
-                    <tr>
-                      <th>Estudiante</th>
-                      <th>Sec.</th>
-                      <th>N1</th>
-                      <th>N2</th>
-                      <th>N3</th>
-                      <th>N4</th>
-                      <th>Prom. Perm.<br><small>40%</small></th>
-                      <th>Ex. Parcial<br><small>30%</small></th>
-                      <th>Ex. Final<br><small>30%</small></th>
-                      <th>Nota Final</th>
-                    </tr>
-                  </thead>
-                  <tbody id="tabla-acta-grado"></tbody>
-                </table>
-              </div>
-              <div class="acta-footer">
-                <span id="acta-promedio-aula">Promedio del aula: --</span>
-                <span style="color:#64748b;font-weight:500;font-size:0.76rem;">Fórmula: Prom. Perm. (40%) + Ex. Parcial (30%) + Ex. Final (30%)</span>
-              </div>
-              <div id="toast-nota" class="toast-ok" hidden></div>
+              <div id="dist-legend" class="dist-legend">Cargando distribución...</div>
             </div>
 
-            <div class="card">
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Estudiante</th>
-                      <th>Grado</th>
-                      <th>Curso</th>
-                      <th>Bimestre</th>
-                      <th>Nota</th>
-                      <th>Fecha</th>
-                    </tr>
-                  </thead>
-                  <tbody id="tabla-notas"></tbody>
-                </table>
+            <div class="card" style="margin-bottom:0;">
+              <div class="card-head">
+                <div>
+                  <h2>Riesgo por Grado Académico</h2>
+                  <p>Mapa de calor de alertas (1ro a 5to Secundaria)</p>
+                </div>
               </div>
+              <div id="grade-chart" class="grade-chart"></div>
             </div>
           </div>
 
-          <!-- VISTA 3: CONVIVENCIA Y BIBLIOTECA -->
-          <div id="view-convivencia" hidden>
-            <div class="dual-cards">
-              <div class="card">
-                <div class="card-head">
-                  <div>
-                    <h2>Registrar Incidencia de Convivencia</h2>
-                    <p>Impacta la señal socioemocional (máx. 20 pts del score)</p>
-                  </div>
-                </div>
-                <form id="form-incidencia" class="form-grid">
-                  <div class="field">
-                    <label for="inc-alumno">Estudiante</label>
-                    <select id="inc-alumno" required></select>
-                  </div>
-                  <div class="field">
-                    <label for="inc-tipo">Tipo</label>
-                    <select id="inc-tipo" required>
-                      <option value="AISLAMIENTO">AISLAMIENTO</option>
-                      <option value="CONFLICTO">CONFLICTO</option>
-                      <option value="DISRUPCION">DISRUPCION</option>
-                      <option value="RECONOCIMIENTO">RECONOCIMIENTO</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="inc-gravedad">Gravedad</label>
-                    <select id="inc-gravedad" required>
-                      <option value="ALTA">ALTA (+12 pts)</option>
-                      <option value="MEDIA" selected>MEDIA (+7 pts)</option>
-                      <option value="BAJA">BAJA (+3 pts)</option>
-                    </select>
-                  </div>
-                  <div class="field" style="grid-column: 1 / -1;">
-                    <label for="inc-desc">Descripción observada</label>
-                    <input id="inc-desc" type="text" maxlength="240" placeholder="Ej. Baja participación y fatiga constante en clase" required>
-                  </div>
-                  <button type="submit" class="btn btn-primary">Guardar Incidencia</button>
-                </form>
-                <div id="toast-incidencia" class="toast-ok" hidden></div>
+          <div class="card wow-banner">
+            <div style="width:100%;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:14px;">
+              <div>
+                <span class="wow-pill">● FACTOR WOW · SIMULADOR IoT RFID + TELEGRAM</span>
+                <h2>Detección Temprana Automática de Deserción</h2>
+                <p>Simula 3 faltas RFID + nota <strong>06</strong> en Matemática para <strong>Lucas Mendoza Paredes (ID 3)</strong>. El semáforo pasa a <strong>ROJO</strong>, SIGE-Bot redacta el mensaje y puedes enviarlo por <strong>Telegram</strong> al apoderado en 1 clic.</p>
               </div>
-
-              <div class="card">
-                <div class="card-head">
-                  <div>
-                    <h2>Registrar Movimiento de Biblioteca</h2>
-                    <p>Impacta la señal de desvinculación (máx. 10 pts del score)</p>
-                  </div>
-                </div>
-                <form id="form-biblioteca" class="form-grid">
-                  <div class="field">
-                    <label for="bib-alumno">Estudiante</label>
-                    <select id="bib-alumno" required></select>
-                  </div>
-                  <div class="field">
-                    <label for="bib-accion">Acción</label>
-                    <select id="bib-accion" required>
-                      <option value="PRESTAMO">PRÉSTAMO</option>
-                      <option value="LECTURA_SALA">LECTURA EN SALA</option>
-                      <option value="DEVOLUCION_TARDIA">DEVOLUCIÓN TARDÍA (+5 pts)</option>
-                      <option value="NO_DEVUELTO">NO DEVUELTO (+10 pts)</option>
-                    </select>
-                  </div>
-                  <div class="field" style="grid-column: 1 / -1;">
-                    <label for="bib-libro">Título del libro</label>
-                    <input id="bib-libro" type="text" maxlength="110" placeholder="Ej. Álgebra Moderna 4" required>
-                  </div>
-                  <button type="submit" class="btn btn-primary">Guardar Movimiento</button>
-                </form>
-                <div id="toast-biblioteca" class="toast-ok" hidden></div>
+              <div class="wow-actions">
+                <button id="btn-simular-rfid" class="btn btn-danger" type="button">Simular 3 faltas RFID + Nota 06</button>
+                <button id="btn-reset-demo" class="btn btn-secondary" type="button">Reiniciar demo</button>
               </div>
             </div>
-
-            <div class="card">
-              <div class="card-head">
-                <div>
-                  <h2>Historial Reciente de Convivencia</h2>
-                </div>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Fecha</th>
-                      <th>Estudiante</th>
-                      <th>Tipo</th>
-                      <th>Gravedad</th>
-                      <th>Descripción</th>
-                    </tr>
-                  </thead>
-                  <tbody id="tabla-incidencias"></tbody>
-                </table>
-              </div>
+            <div class="rfid-console" style="width:100%;">
+              <span style="font-size:0.78rem;color:#94a3b8;font-weight:600;">Lector RFID manual:</span>
+              <select id="rfid-alumno" class="rfid-select" aria-label="Seleccionar estudiante"></select>
+              <select id="rfid-estado" class="rfid-select" aria-label="Estado RFID">
+                <option value="PRESENTE">PRESENTE (Ingreso puntual)</option>
+                <option value="TARDANZA">TARDANZA</option>
+                <option value="FALTA">FALTA (Ausencia)</option>
+              </select>
+              <button id="btn-rfid-manual" class="btn btn-primary" type="button">Escanear Tarjeta RFID</button>
             </div>
           </div>
 
-          <!-- VISTA 4: INTERVENCIONES TUTORIALES -->
-          <div id="view-intervenciones" hidden>
-            <div class="card">
-              <div class="card-head">
-                <div>
-                  <h2>Registro de Intervenciones Tutoriales</h2>
-                  <p>Única tabla con permiso INSERT para SIGE-Bot (solo rol Tutor y con confirmación explícita)</p>
-                </div>
-                <button id="btn-refrescar-int" class="btn btn-secondary" type="button">Actualizar</button>
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Semáforo Predictivo de Estudiantes</h2>
+                <p>Haz clic en cualquier estudiante para abrir su Ficha 360° completa</p>
               </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Estudiante</th>
-                      <th>Tutor</th>
-                      <th>Motivo</th>
-                      <th>Acción Acordada</th>
-                      <th>Estado</th>
-                      <th>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody id="tabla-intervenciones"></tbody>
-                </table>
+              <div class="toolbar">
+                <input id="buscar-alumno" class="search-input" type="search" placeholder="Buscar por nombre o código...">
+                <button type="button" class="filter-pill active" data-filter="TODOS">Todos</button>
+                <button type="button" class="filter-pill" data-filter="ROJO">Rojo</button>
+                <button type="button" class="filter-pill" data-filter="AMBAR">Ámbar</button>
+                <button type="button" class="filter-pill" data-filter="VERDE">Verde</button>
               </div>
             </div>
-          </div>
-
-          <!-- VISTA 5: MATRÍCULA DE ALUMNOS -->
-          <div id="view-alumnos" hidden>
-            <div class="card">
-              <div class="card-head">
-                <div>
-                  <h2>Matricular Nuevo Estudiante (Datos Simulados)</h2>
-                  <p>Asigna automáticamente código de estudiante y tarjeta RFID en PostgreSQL</p>
-                </div>
-              </div>
-              <form id="form-alumno" class="form-grid">
-                <div class="field">
-                  <label for="alu-nombre">Nombre completo (ficticio)</label>
-                  <input id="alu-nombre" type="text" maxlength="95" placeholder="Ej. Alejandro Ríos Vela" required>
-                </div>
-                <div class="field">
-                  <label for="alu-grado">Grado</label>
-                  <select id="alu-grado" required>
-                    <option value="1ro Secundaria">1ro Secundaria</option>
-                    <option value="2do Secundaria">2do Secundaria</option>
-                    <option value="3ro Secundaria" selected>3ro Secundaria</option>
-                    <option value="4to Secundaria">4to Secundaria</option>
-                    <option value="5to Secundaria">5to Secundaria</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="alu-seccion">Sección</label>
-                  <select id="alu-seccion" required>
-                    <option value="A">A</option>
-                    <option value="B">B</option>
-                    <option value="C">C</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="alu-apoderado">Apoderado (Demo)</label>
-                  <input id="alu-apoderado" type="text" maxlength="95" placeholder="Ej. María Vela (Demo)" required>
-                </div>
-                <button type="submit" class="btn btn-primary">Matricular Estudiante</button>
-              </form>
-              <div id="toast-alumno" class="toast-ok" hidden></div>
-            </div>
-          </div>
-
-          <!-- VISTA 6: PROTOCOLOS MINEDU (RAG) -->
-          <div id="view-protocolos" hidden>
-            <div class="card">
-              <div class="card-head">
-                <div>
-                  <h2>Base de Conocimiento — Protocolos Internos y Guías MINEDU</h2>
-                  <p>Consultada en vivo por SIGE-Bot vía herramienta MCP consultar_protocolo_tutoria</p>
-                </div>
-                <input id="buscar-protocolo" class="search-input" type="search" placeholder="Filtrar protocolos...">
-              </div>
-              <div id="grid-protocolos" class="protocol-grid"></div>
+            <div id="db-error" class="badge badge-ROJO" hidden style="margin-bottom:10px;"></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Estudiante</th>
+                    <th>Grado</th>
+                    <th>Promedio</th>
+                    <th>Faltas</th>
+                    <th>Índice de Riesgo</th>
+                    <th>Semáforo</th>
+                  </tr>
+                </thead>
+                <tbody id="tabla-alumnos">
+                  <tr><td colspan="6" style="text-align:center;color:#64748b;">Cargando datos desde PostgreSQL...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
-
-        <!-- CHAT INTEGRADO SIGE-BOT -->
-        <aside class="chat-panel">
-          <div class="chat-head">
-            <div class="chat-agent">
-              <div class="chat-avatar">IA</div>
-              <div>
-                <strong>SIGE-Bot · Asistente Predictivo</strong>
-                <small id="chat-rol-label">Rol: Tutor / Docente · 5 herramientas MCP</small>
-              </div>
-            </div>
-            <span class="pulse-dot" title="Agente n8n + MCP en línea"></span>
-          </div>
-
-          <div id="chat-mensajes" class="chat-messages">
-            <div class="bubble bubble-bot">
-              <span class="bubble-meta">SIGE-Bot · IA Preventiva (Ley N.° 31814)</span>
-              <span>Hola, soy el asistente de inteligencia artificial de SIGE-360. Consulto en tiempo real la base de datos escolar y los protocolos MINEDU para detectar riesgo de deserción y apoyar la tutoría.</span>
-            </div>
-          </div>
-
-          <!-- Rayos X MCP en Vivo -->
-          <div class="mcp-xray">
-            <div class="mcp-xray-head">
-              <span>⚡ RAYOS X · HERRAMIENTAS MCP EN VIVO</span>
-              <span id="mcp-count">0 llamadas</span>
-            </div>
-            <div id="mcp-xray-list" class="mcp-xray-list">
-              <div style="color:#94a3b8;">Haz una pregunta para ver qué herramienta MCP consulta PostgreSQL...</div>
-            </div>
-          </div>
-
-          <div id="chat-chips" class="chat-chips">
-            <button type="button" class="chip" data-prompt="¿Qué alumnos están en alerta roja hoy?">Alumnos en rojo</button>
-            <button type="button" class="chip" data-prompt="Calcula el índice de riesgo del alumno con ID 1">Riesgo Mateo (ID 1)</button>
-            <button type="button" class="chip" data-prompt="¿Qué indica el protocolo MINEDU ante 3 faltas consecutivas?">Protocolo 3 faltas</button>
-          </div>
-
-          <form id="chat-form" class="chat-form">
-            <input id="chat-texto" type="text" placeholder="Escribe tu consulta para SIGE-Bot..." maxlength="500" required autocomplete="off">
-            <button type="submit" class="btn btn-primary">Enviar</button>
-          </form>
-        </aside>
+        <aside id="sige-chat-panel" class="chat-panel"></aside>
       </main>
     </div>
   </div>
 
-  <!-- MODAL FICHA 360° DEL ESTUDIANTE -->
+  <!-- MODAL FICHA 360° -->
   <div id="modal-ficha" class="modal-backdrop" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-nombre">
       <div class="modal-head">
@@ -529,6 +140,7 @@
     </div>
   </div>
 
+  <script src="/layout.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

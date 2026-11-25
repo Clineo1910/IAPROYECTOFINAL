@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGE-360 | Biblioteca Escolar</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="sige-sidebar" class="sidebar"></aside>
+    <div class="main-area">
+      <header id="sige-topbar" class="topbar"></header>
+      <main class="workspace">
+        <section class="content-col">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Registrar Movimiento de Biblioteca Escolar</h2>
+                <p>Impacta la señal de desvinculación escolar (máximo 10 pts del índice de riesgo)</p>
+              </div>
+            </div>
+            <form id="form-biblioteca" class="form-grid">
+              <div class="field">
+                <label for="bib-alumno">Estudiante</label>
+                <select id="bib-alumno" required></select>
+              </div>
+              <div class="field">
+                <label for="bib-accion">Tipo de Movimiento</label>
+                <select id="bib-accion" required>
+                  <option value="PRESTAMO">PRÉSTAMO</option>
+                  <option value="LECTURA_SALA">LECTURA EN SALA</option>
+                  <option value="DEVOLUCION_TARDIA">DEVOLUCIÓN TARDÍA (+5 pts)</option>
+                  <option value="NO_DEVUELTO">NO DEVUELTO (+10 pts)</option>
+                </select>
+              </div>
+              <div class="field" style="grid-column:1 / -1;">
+                <label for="bib-libro">Título del libro</label>
+                <input id="bib-libro" type="text" maxlength="110" placeholder="Ej. Álgebra Moderna 4" required>
+              </div>
+              <button type="submit" class="btn btn-primary">Guardar Movimiento</button>
+            </form>
+            <div id="toast-bib" class="toast-ok" hidden></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Historial de Biblioteca Escolar</h2>
+                <p>Préstamos, lectura en sala y devoluciones en vivo desde PostgreSQL</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Fecha</th><th>Estudiante</th><th>Libro</th><th>Estado</th></tr>
+                </thead>
+                <tbody id="tabla-biblioteca"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        <aside id="sige-chat-panel" class="chat-panel"></aside>
+      </main>
+    </div>
+  </div>
+
+  <script src="/layout.js"></script>
+  <script>
+    async function cargar() {
+      const [rd, rc] = await Promise.all([fetch('/api/dashboard'), fetch('/api/convivencia')]);
+      const alumnos = ((await rd.json()).alumnos || []).sort((a, b) => a.alumno_id - b.alumno_id);
+      const sel = document.getElementById('bib-alumno');
+      if (sel.options.length === 0) {
+        alumnos.forEach((a) => {
+          const opt = document.createElement('option');
+          opt.value = String(a.alumno_id);
+          opt.textContent = `${a.nombre_completo} (${a.grado} ${a.seccion})`;
+          sel.appendChild(opt);
+        });
+      }
+      const tbody = document.getElementById('tabla-biblioteca');
+      tbody.textContent = '';
+      ((await rc.json()).biblioteca || []).forEach((bItem) => {
+        const tr = document.createElement('tr');
+        [String(bItem.fecha).slice(0, 10), `${bItem.nombre_completo} (${bItem.grado} ${bItem.seccion})`, bItem.libro].forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+        const tdA = document.createElement('td');
+        const b = document.createElement('span');
+        b.className = 'badge ' + (bItem.accion === 'NO_DEVUELTO' ? 'badge-ROJO' : (bItem.accion === 'DEVOLUCION_TARDIA' ? 'badge-AMBAR' : 'badge-VERDE'));
+        b.textContent = bItem.accion;
+        tdA.appendChild(b); tr.appendChild(tdA);
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('form-biblioteca').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const r = await fetch('/api/biblioteca', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alumno_id: Number(document.getElementById('bib-alumno').value),
+          accion: document.getElementById('bib-accion').value,
+          libro: document.getElementById('bib-libro').value,
+        }),
+      });
+      const d = await r.json();
+      if (r.ok) { document.getElementById('bib-libro').value = ''; window.SIGE.mostrarToast('toast-bib', d.mensaje); await cargar(); }
+    });
+
+    window.SIGE.iniciarLayout({ paginaActiva: 'biblioteca', titulo: 'Biblioteca Escolar' }).then(cargar);
+  </script>
+</body>
+</html>

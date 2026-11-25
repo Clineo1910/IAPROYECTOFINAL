@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGE-360 | Alumnos y Cuentas de Padres</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="sige-sidebar" class="sidebar"></aside>
+    <div class="main-area">
+      <header id="sige-topbar" class="topbar"></header>
+      <main class="workspace">
+        <section class="content-col">
+          <!-- Crear Cuenta de Padre / Docente -->
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Crear Cuenta de Acceso (Padres / Docentes)</h2>
+                <p>Las cuentas creadas se guardan en PostgreSQL y permiten iniciar sesión de inmediato en /login.html con permisos diferenciados</p>
+              </div>
+            </div>
+            <form id="form-usuario" class="form-grid">
+              <div class="field">
+                <label for="usr-nombre">Nombre completo</label>
+                <input id="usr-nombre" type="text" maxlength="95" placeholder="Ej. Carmen Ramos (Demo)" required>
+              </div>
+              <div class="field">
+                <label for="usr-email">Correo de acceso</label>
+                <input id="usr-email" type="email" maxlength="110" placeholder="carmen@sige360.edu.pe" required>
+              </div>
+              <div class="field">
+                <label for="usr-pass">Contraseña</label>
+                <input id="usr-pass" type="text" minlength="4" value="padre2026" required>
+              </div>
+              <div class="field">
+                <label for="usr-rol">Rol / Permisos</label>
+                <select id="usr-rol">
+                  <option value="padre" selected>Padre / Apoderado (Solo su hijo)</option>
+                  <option value="tutor">Docente / Tutor (Acceso total)</option>
+                </select>
+              </div>
+              <div class="field" id="wrap-hijo">
+                <label for="usr-alumno">Vincular a su hijo/a</label>
+                <select id="usr-alumno"></select>
+              </div>
+              <button type="submit" class="btn btn-primary">Crear Cuenta</button>
+            </form>
+            <div id="toast-usuario" class="toast-ok" hidden></div>
+          </div>
+
+          <!-- Lista de Cuentas Activas -->
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Cuentas Registradas en PostgreSQL</h2>
+                <p>Control de acceso basado en roles (RBAC)</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Vínculo / Cargo</th></tr>
+                </thead>
+                <tbody id="tabla-usuarios"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Matrícula de Nuevo Estudiante -->
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Matricular Nuevo Estudiante (Datos Simulados)</h2>
+                <p>Genera automáticamente código de estudiante y tarjeta RFID en PostgreSQL</p>
+              </div>
+            </div>
+            <form id="form-alumno" class="form-grid">
+              <div class="field">
+                <label for="alu-nombre">Nombre completo (ficticio)</label>
+                <input id="alu-nombre" type="text" maxlength="95" placeholder="Ej. Alejandro Ríos Vela" required>
+              </div>
+              <div class="field">
+                <label for="alu-grado">Grado</label>
+                <select id="alu-grado">
+                  <option value="1ro Secundaria">1ro Secundaria</option>
+                  <option value="2do Secundaria">2do Secundaria</option>
+                  <option value="3ro Secundaria" selected>3ro Secundaria</option>
+                  <option value="4to Secundaria">4to Secundaria</option>
+                  <option value="5to Secundaria">5to Secundaria</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="alu-seccion">Sección</label>
+                <select id="alu-seccion"><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+              </div>
+              <div class="field">
+                <label for="alu-apoderado">Apoderado (Demo)</label>
+                <input id="alu-apoderado" type="text" maxlength="95" placeholder="Ej. María Vela (Demo)" required>
+              </div>
+              <button type="submit" class="btn btn-primary">Matricular Estudiante</button>
+            </form>
+            <div id="toast-alumno" class="toast-ok" hidden></div>
+          </div>
+        </section>
+        <aside id="sige-chat-panel" class="chat-panel"></aside>
+      </main>
+    </div>
+  </div>
+
+  <script src="/layout.js"></script>
+  <script>
+    async function cargar() {
+      const [rd, ru] = await Promise.all([fetch('/api/dashboard'), fetch('/api/usuarios')]);
+      const alumnos = ((await rd.json()).alumnos || []).sort((a, b) => a.alumno_id - b.alumno_id);
+      const sel = document.getElementById('usr-alumno');
+      const prev = sel.value;
+      sel.textContent = '';
+      alumnos.forEach((a) => {
+        const opt = document.createElement('option');
+        opt.value = String(a.alumno_id);
+        opt.textContent = `${a.nombre_completo} (${a.grado} ${a.seccion})`;
+        sel.appendChild(opt);
+      });
+      if (prev) sel.value = prev;
+
+      const tbody = document.getElementById('tabla-usuarios');
+      tbody.textContent = '';
+      ((await ru.json()).usuarios || []).forEach((u) => {
+        const tr = document.createElement('tr');
+        [u.nombre, u.email].forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+        const tdR = document.createElement('td');
+        const b = document.createElement('span'); b.className = 'badge ' + (u.rol === 'tutor' ? 'badge-GENERAL' : 'badge-VERDE'); b.textContent = u.rol === 'tutor' ? 'Docente / Tutor' : 'Padre / Apoderado';
+        tdR.appendChild(b); tr.appendChild(tdR);
+        const tdC = document.createElement('td'); tdC.textContent = u.cargo; tr.appendChild(tdC);
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('usr-rol').addEventListener('change', (e) => {
+      document.getElementById('wrap-hijo').hidden = e.target.value !== 'padre';
+    });
+
+    document.getElementById('form-usuario').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const rol = document.getElementById('usr-rol').value;
+      const r = await fetch('/api/usuarios', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: document.getElementById('usr-nombre').value,
+          email: document.getElementById('usr-email').value,
+          password: document.getElementById('usr-pass').value,
+          rol,
+          alumno_id: rol === 'padre' ? Number(document.getElementById('usr-alumno').value) : null,
+        }),
+      });
+      const d = await r.json();
+      window.SIGE.mostrarToast('toast-usuario', d.mensaje || d.error || 'Listo.');
+      if (r.ok) {
+        document.getElementById('usr-nombre').value = '';
+        document.getElementById('usr-email').value = '';
+        await cargar();
+      }
+    });
+
+    document.getElementById('form-alumno').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const r = await fetch('/api/alumnos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre_completo: document.getElementById('alu-nombre').value,
+          grado: document.getElementById('alu-grado').value,
+          seccion: document.getElementById('alu-seccion').value,
+          apoderado_nombre: document.getElementById('alu-apoderado').value,
+        }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        document.getElementById('alu-nombre').value = '';
+        document.getElementById('alu-apoderado').value = '';
+        window.SIGE.mostrarToast('toast-alumno', d.mensaje);
+        await cargar();
+      }
+    });
+
+    window.SIGE.iniciarLayout({ paginaActiva: 'usuarios', titulo: 'Matrícula y Cuentas de Padres' }).then(cargar);
+  </script>
+</body>
+</html>

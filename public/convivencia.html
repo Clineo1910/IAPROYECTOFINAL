@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGE-360 | Convivencia Escolar</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="sige-sidebar" class="sidebar"></aside>
+    <div class="main-area">
+      <header id="sige-topbar" class="topbar"></header>
+      <main class="workspace">
+        <section class="content-col">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Registrar Incidencia de Convivencia Escolar</h2>
+                <p>Impacta la señal socioemocional (máximo 20 pts del índice de riesgo predictivo)</p>
+              </div>
+            </div>
+            <form id="form-incidencia" class="form-grid">
+              <div class="field">
+                <label for="inc-alumno">Estudiante</label>
+                <select id="inc-alumno" required></select>
+              </div>
+              <div class="field">
+                <label for="inc-tipo">Tipo de Evento</label>
+                <select id="inc-tipo" required>
+                  <option value="AISLAMIENTO">AISLAMIENTO</option>
+                  <option value="CONFLICTO">CONFLICTO</option>
+                  <option value="DISRUPCION">DISRUPCIÓN</option>
+                  <option value="RECONOCIMIENTO">RECONOCIMIENTO (Positivo)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="inc-gravedad">Gravedad</label>
+                <select id="inc-gravedad" required>
+                  <option value="ALTA">ALTA (+12 pts)</option>
+                  <option value="MEDIA" selected>MEDIA (+7 pts)</option>
+                  <option value="BAJA">BAJA (+3 pts)</option>
+                </select>
+              </div>
+              <div class="field" style="grid-column:1 / -1;">
+                <label for="inc-desc">Descripción observada</label>
+                <input id="inc-desc" type="text" maxlength="240" placeholder="Ej. Baja participación y fatiga constante en clase" required>
+              </div>
+              <button type="submit" class="btn btn-primary">Guardar Incidencia</button>
+            </form>
+            <div id="toast-inc" class="toast-ok" hidden></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Historial de Convivencia Escolar</h2>
+                <p>Registros en vivo desde PostgreSQL</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Fecha</th><th>Estudiante</th><th>Tipo</th><th>Gravedad</th><th>Descripción</th></tr>
+                </thead>
+                <tbody id="tabla-incidencias"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        <aside id="sige-chat-panel" class="chat-panel"></aside>
+      </main>
+    </div>
+  </div>
+
+  <script src="/layout.js"></script>
+  <script>
+    async function cargar() {
+      const [rd, rc] = await Promise.all([fetch('/api/dashboard'), fetch('/api/convivencia')]);
+      const alumnos = ((await rd.json()).alumnos || []).sort((a, b) => a.alumno_id - b.alumno_id);
+      const sel = document.getElementById('inc-alumno');
+      if (sel.options.length === 0) {
+        alumnos.forEach((a) => {
+          const opt = document.createElement('option');
+          opt.value = String(a.alumno_id);
+          opt.textContent = `${a.nombre_completo} (${a.grado} ${a.seccion})`;
+          sel.appendChild(opt);
+        });
+      }
+      const tbody = document.getElementById('tabla-incidencias');
+      tbody.textContent = '';
+      ((await rc.json()).incidencias || []).forEach((i) => {
+        const tr = document.createElement('tr');
+        [String(i.fecha).slice(0, 10), `${i.nombre_completo} (${i.grado} ${i.seccion})`, i.tipo].forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+        const tdG = document.createElement('td');
+        const b = document.createElement('span'); b.className = 'badge ' + (i.gravedad === 'ALTA' ? 'badge-ROJO' : (i.gravedad === 'MEDIA' ? 'badge-AMBAR' : 'badge-VERDE')); b.textContent = i.gravedad;
+        tdG.appendChild(b); tr.appendChild(tdG);
+        const tdD = document.createElement('td'); tdD.textContent = i.descripcion; tr.appendChild(tdD);
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('form-incidencia').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const r = await fetch('/api/incidencias', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alumno_id: Number(document.getElementById('inc-alumno').value),
+          tipo: document.getElementById('inc-tipo').value,
+          gravedad: document.getElementById('inc-gravedad').value,
+          descripcion: document.getElementById('inc-desc').value,
+        }),
+      });
+      const d = await r.json();
+      if (r.ok) { document.getElementById('inc-desc').value = ''; window.SIGE.mostrarToast('toast-inc', d.mensaje); await cargar(); }
+    });
+
+    window.SIGE.iniciarLayout({ paginaActiva: 'convivencia', titulo: 'Convivencia Escolar' }).then(cargar);
+  </script>
+</body>
+</html>
