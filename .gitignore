@@ -1,0 +1,16 @@
+# Claves y configuraciones locales (NO subir a GitHub)
+.env
+agente/.env
+config.php
+
+# Entornos y temporales de Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/

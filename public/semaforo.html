@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGE-360 | Pantalla Semáforo Sala de Profesores (IoT)</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="iot-body">
+  <header class="iot-topbar">
+    <div class="iot-title">
+      <div class="brand-logo">360</div>
+      <div>
+        <h1>SIGE-360 · SEMÁFORO DE SALA DE PROFESORES</h1>
+        <p>Monitoreo predictivo en tiempo real · Lector RFID de puerta + Motor PostgreSQL</p>
+      </div>
+    </div>
+    <div class="iot-clock-wrap">
+      <span class="iot-live"><span class="pulse-dot"></span> EN VIVO · AUTO-REFRESCO 4s</span>
+      <div>
+        <div id="iot-reloj" class="iot-clock">--:--:--</div>
+        <small id="iot-fecha" style="color:#94a3b8;font-size:0.76rem;display:block;text-align:right;"></small>
+      </div>
+    </div>
+  </header>
+
+  <section class="iot-summary">
+    <div class="iot-kpi">
+      <span>ESTUDIANTES ACTIVOS</span>
+      <strong id="iot-total">--</strong>
+    </div>
+    <div class="iot-kpi" style="border-left:4px solid #ef4444;">
+      <span style="color:#fca5a5;">ALERTA ROJA (≥ 60)</span>
+      <strong id="iot-rojo" style="color:#f87171;">--</strong>
+    </div>
+    <div class="iot-kpi" style="border-left:4px solid #f59e0b;">
+      <span style="color:#fcd34d;">ALERTA ÁMBAR (30–59)</span>
+      <strong id="iot-ambar" style="color:#fbbf24;">--</strong>
+    </div>
+    <div class="iot-kpi" style="border-left:4px solid #22c55e;">
+      <span style="color:#86efac;">ESTADO VERDE (&lt; 30)</span>
+      <strong id="iot-verde" style="color:#4ade80;">--</strong>
+    </div>
+  </section>
+
+  <main class="iot-board">
+    <section class="iot-panel iot-panel-rojo">
+      <div class="iot-panel-head">
+        <h2>ALERTA ROJA · ATENCIÓN INMEDIATA (&lt; 24H)</h2>
+        <span id="cnt-rojo" class="badge badge-ROJO">0</span>
+      </div>
+      <div id="lista-rojo" class="iot-cards"></div>
+    </section>
+
+    <section class="iot-panel iot-panel-ambar">
+      <div class="iot-panel-head">
+        <h2>ALERTA ÁMBAR · SEGUIMIENTO PREVENTIVO</h2>
+        <span id="cnt-ambar" class="badge badge-AMBAR">0</span>
+      </div>
+      <div id="lista-ambar" class="iot-cards"></div>
+    </section>
+
+    <section class="iot-panel iot-panel-rfid">
+      <div class="iot-panel-head">
+        <h2>LECTURAS RFID · PUERTA DE INGRESO</h2>
+        <span class="iot-pill">LIVE FEED</span>
+      </div>
+      <div id="lista-rfid" class="rfid-list"></div>
+    </section>
+  </main>
+
+  <script src="/semaforo.js"></script>
+</body>
+</html>
