@@ -190,6 +190,29 @@ function renderIntervenciones(lista) {
     b.textContent = item.estado;
     tdEst.appendChild(b);
     tr.appendChild(tdEst);
+
+    const tdAcc = document.createElement('td');
+    const siguiente = item.estado === 'PROGRAMADA' ? 'SEGUIMIENTO' : (item.estado === 'SEGUIMIENTO' ? 'REALIZADA' : null);
+    if (siguiente) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-secondary btn-xs';
+      btn.textContent = `→ ${siguiente}`;
+      btn.addEventListener('click', async () => {
+        await fetch(`/api/intervenciones/${item.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estado: siguiente }),
+        });
+        cargarDashboard();
+      });
+      tdAcc.appendChild(btn);
+    } else {
+      tdAcc.textContent = 'Cerrada';
+      tdAcc.style.color = '#64748b';
+      tdAcc.style.fontSize = '0.76rem';
+    }
+    tr.appendChild(tdAcc);
     tbody.appendChild(tr);
   });
 }
@@ -407,16 +430,22 @@ document.querySelectorAll('.nav-btn[data-view]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const vista = btn.dataset.view;
     document.querySelectorAll('.nav-btn[data-view]').forEach((b) => b.classList.toggle('active', b === btn));
-    ['panel', 'intervenciones', 'protocolos'].forEach((v) => {
-      document.getElementById(`view-${v}`).hidden = v !== vista;
+    ['panel', 'notas', 'convivencia', 'intervenciones', 'alumnos', 'protocolos'].forEach((v) => {
+      const el = document.getElementById(`view-${v}`);
+      if (el) el.hidden = v !== vista;
     });
     const titulos = {
       panel: 'Panel Predictivo de Riesgo Escolar',
+      notas: 'Registro y Gestión de Calificaciones',
+      convivencia: 'Convivencia Escolar y Biblioteca',
       intervenciones: 'Registro de Intervenciones Tutoriales',
+      alumnos: 'Matrícula y Gestión de Estudiantes',
       protocolos: 'Base de Conocimiento — Protocolos MINEDU (RAG)',
     };
     document.getElementById('topbar-title').textContent = titulos[vista];
     if (vista === 'protocolos') cargarProtocolos();
+    if (vista === 'notas') cargarNotas();
+    if (vista === 'convivencia') cargarConvivencia();
   });
 });
 
@@ -514,14 +543,20 @@ function renderGraficoGrados(alumnos) {
 }
 
 function poblarSelectorRfid(alumnos) {
-  const sel = document.getElementById('rfid-alumno');
-  if (!sel || sel.options.length > 0) return;
+  const selectores = ['rfid-alumno', 'nota-alumno', 'inc-alumno', 'bib-alumno'];
   const ordenados = [...alumnos].sort((a, b) => a.alumno_id - b.alumno_id);
-  ordenados.forEach((a) => {
-    const opt = document.createElement('option');
-    opt.value = String(a.alumno_id);
-    opt.textContent = `${a.nombre_completo} (${a.codigo_rfid})`;
-    sel.appendChild(opt);
+  selectores.forEach((id) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.textContent = '';
+    ordenados.forEach((a) => {
+      const opt = document.createElement('option');
+      opt.value = String(a.alumno_id);
+      opt.textContent = `${a.nombre_completo} (${a.grado} ${a.seccion})`;
+      sel.appendChild(opt);
+    });
+    if (prev) sel.value = prev;
   });
 }
 
@@ -575,3 +610,152 @@ document.getElementById('btn-rfid-manual')?.addEventListener('click', async () =
 
 cargarMcpLogs();
 setInterval(cargarMcpLogs, 5000);
+
+// ==================== MÓDULOS CRUD: NOTAS, CONVIVENCIA, BIBLIOTECA, MATRÍCULA ====================
+function mostrarToast(id, texto) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = texto;
+  el.hidden = false;
+  setTimeout(() => { el.hidden = true; }, 4500);
+}
+
+async function cargarNotas() {
+  const tbody = document.getElementById('tabla-notas');
+  if (!tbody) return;
+  const r = await fetch('/api/notas');
+  const d = await r.json();
+  tbody.textContent = '';
+  (d.notas || []).forEach((n) => {
+    const tr = document.createElement('tr');
+    const valores = [n.nombre_completo, `${n.grado} ${n.seccion}`, n.curso, `Bim. ${n.bimestre}`];
+    valores.forEach((v) => {
+      const td = document.createElement('td');
+      td.textContent = String(v);
+      tr.appendChild(td);
+    });
+    const tdNota = document.createElement('td');
+    const b = document.createElement('span');
+    b.className = `badge ${n.nota < 11 ? 'badge-ROJO' : (n.nota < 14 ? 'badge-AMBAR' : 'badge-VERDE')}`;
+    b.textContent = Number(n.nota).toFixed(1);
+    tdNota.appendChild(b);
+    tr.appendChild(tdNota);
+
+    const tdFecha = document.createElement('td');
+    tdFecha.textContent = String(n.fecha_registro).slice(0, 10);
+    tr.appendChild(tdFecha);
+    tbody.appendChild(tr);
+  });
+}
+
+async function cargarConvivencia() {
+  const tbody = document.getElementById('tabla-incidencias');
+  if (!tbody) return;
+  const r = await fetch('/api/convivencia');
+  const d = await r.json();
+  tbody.textContent = '';
+  (d.incidencias || []).forEach((i) => {
+    const tr = document.createElement('tr');
+    [String(i.fecha).slice(0, 10), `${i.nombre_completo} (${i.grado} ${i.seccion})`, i.tipo].forEach((v) => {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    });
+    const tdG = document.createElement('td');
+    const b = document.createElement('span');
+    b.className = `badge ${i.gravedad === 'ALTA' ? 'badge-ROJO' : (i.gravedad === 'MEDIA' ? 'badge-AMBAR' : 'badge-VERDE')}`;
+    b.textContent = i.gravedad;
+    tdG.appendChild(b);
+    tr.appendChild(tdG);
+
+    const tdD = document.createElement('td');
+    tdD.textContent = i.descripcion;
+    tr.appendChild(tdD);
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById('form-nota')?.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const payload = {
+    alumno_id: Number(document.getElementById('nota-alumno').value),
+    curso: document.getElementById('nota-curso').value,
+    bimestre: Number(document.getElementById('nota-bimestre').value),
+    nota: Number(document.getElementById('nota-valor').value),
+  };
+  const r = await fetch('/api/notas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const d = await r.json();
+  if (r.ok) {
+    mostrarToast('toast-nota', d.mensaje);
+    await cargarDashboard();
+    await cargarNotas();
+  }
+});
+
+document.getElementById('form-incidencia')?.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const payload = {
+    alumno_id: Number(document.getElementById('inc-alumno').value),
+    tipo: document.getElementById('inc-tipo').value,
+    gravedad: document.getElementById('inc-gravedad').value,
+    descripcion: document.getElementById('inc-desc').value,
+  };
+  const r = await fetch('/api/incidencias', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const d = await r.json();
+  if (r.ok) {
+    document.getElementById('inc-desc').value = '';
+    mostrarToast('toast-incidencia', d.mensaje);
+    await cargarDashboard();
+    await cargarConvivencia();
+  }
+});
+
+document.getElementById('form-biblioteca')?.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const payload = {
+    alumno_id: Number(document.getElementById('bib-alumno').value),
+    accion: document.getElementById('bib-accion').value,
+    libro: document.getElementById('bib-libro').value,
+  };
+  const r = await fetch('/api/biblioteca', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const d = await r.json();
+  if (r.ok) {
+    document.getElementById('bib-libro').value = '';
+    mostrarToast('toast-biblioteca', d.mensaje);
+    await cargarDashboard();
+  }
+});
+
+document.getElementById('form-alumno')?.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const payload = {
+    nombre_completo: document.getElementById('alu-nombre').value,
+    grado: document.getElementById('alu-grado').value,
+    seccion: document.getElementById('alu-seccion').value,
+    apoderado_nombre: document.getElementById('alu-apoderado').value,
+  };
+  const r = await fetch('/api/alumnos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const d = await r.json();
+  if (r.ok) {
+    document.getElementById('alu-nombre').value = '';
+    document.getElementById('alu-apoderado').value = '';
+    mostrarToast('toast-alumno', d.mensaje);
+    await cargarDashboard();
+  }
+});

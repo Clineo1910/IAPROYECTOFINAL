@@ -25,8 +25,17 @@
             <span>Panel Predictivo</span>
             <span id="nav-badge-rojo" class="nav-badge">0</span>
           </button>
+          <button type="button" class="nav-btn" data-view="notas">
+            <span>Registro de Notas</span>
+          </button>
+          <button type="button" class="nav-btn" data-view="convivencia">
+            <span>Convivencia y Biblioteca</span>
+          </button>
           <button type="button" class="nav-btn" data-view="intervenciones">
             <span>Intervenciones Tutoriales</span>
+          </button>
+          <button type="button" class="nav-btn" data-view="alumnos">
+            <span>Matrícula de Alumnos</span>
           </button>
           <button type="button" class="nav-btn" data-view="protocolos">
             <span>Protocolos MINEDU (RAG)</span>
@@ -193,7 +202,170 @@
             </div>
           </div>
 
-          <!-- VISTA 2: INTERVENCIONES TUTORIALES -->
+          <!-- VISTA 2: REGISTRO DE NOTAS -->
+          <div id="view-notas" hidden>
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>Registrar Nueva Calificación (Escala 0–20)</h2>
+                  <p>Al guardar en PostgreSQL, SIGE-360 recalcula al instante el índice de riesgo y el semáforo IoT</p>
+                </div>
+              </div>
+              <form id="form-nota" class="form-grid">
+                <div class="field">
+                  <label for="nota-alumno">Estudiante</label>
+                  <select id="nota-alumno" required></select>
+                </div>
+                <div class="field">
+                  <label for="nota-curso">Curso</label>
+                  <select id="nota-curso" required>
+                    <option value="Matemática">Matemática</option>
+                    <option value="Comunicación">Comunicación</option>
+                    <option value="Ciencia y Tecnología">Ciencia y Tecnología</option>
+                    <option value="Historia y Geografía">Historia y Geografía</option>
+                    <option value="Inglés">Inglés</option>
+                    <option value="Física">Física</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="nota-bimestre">Bimestre</label>
+                  <select id="nota-bimestre" required>
+                    <option value="1">Bimestre 1</option>
+                    <option value="2">Bimestre 2</option>
+                    <option value="3">Bimestre 3</option>
+                    <option value="4" selected>Bimestre 4</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="nota-valor">Nota (0–20)</label>
+                  <input id="nota-valor" type="number" min="0" max="20" step="0.5" value="14" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Guardar Nota</button>
+              </form>
+              <div id="toast-nota" class="toast-ok" hidden></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>Calificaciones Recientes en PostgreSQL</h2>
+                  <p>Últimas notas registradas en la institución</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Estudiante</th>
+                      <th>Grado</th>
+                      <th>Curso</th>
+                      <th>Bimestre</th>
+                      <th>Nota</th>
+                      <th>Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tabla-notas"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- VISTA 3: CONVIVENCIA Y BIBLIOTECA -->
+          <div id="view-convivencia" hidden>
+            <div class="dual-cards">
+              <div class="card">
+                <div class="card-head">
+                  <div>
+                    <h2>Registrar Incidencia de Convivencia</h2>
+                    <p>Impacta la señal socioemocional (máx. 20 pts del score)</p>
+                  </div>
+                </div>
+                <form id="form-incidencia" class="form-grid">
+                  <div class="field">
+                    <label for="inc-alumno">Estudiante</label>
+                    <select id="inc-alumno" required></select>
+                  </div>
+                  <div class="field">
+                    <label for="inc-tipo">Tipo</label>
+                    <select id="inc-tipo" required>
+                      <option value="AISLAMIENTO">AISLAMIENTO</option>
+                      <option value="CONFLICTO">CONFLICTO</option>
+                      <option value="DISRUPCION">DISRUPCION</option>
+                      <option value="RECONOCIMIENTO">RECONOCIMIENTO</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="inc-gravedad">Gravedad</label>
+                    <select id="inc-gravedad" required>
+                      <option value="ALTA">ALTA (+12 pts)</option>
+                      <option value="MEDIA" selected>MEDIA (+7 pts)</option>
+                      <option value="BAJA">BAJA (+3 pts)</option>
+                    </select>
+                  </div>
+                  <div class="field" style="grid-column: 1 / -1;">
+                    <label for="inc-desc">Descripción observada</label>
+                    <input id="inc-desc" type="text" maxlength="240" placeholder="Ej. Baja participación y fatiga constante en clase" required>
+                  </div>
+                  <button type="submit" class="btn btn-primary">Guardar Incidencia</button>
+                </form>
+                <div id="toast-incidencia" class="toast-ok" hidden></div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <div>
+                    <h2>Registrar Movimiento de Biblioteca</h2>
+                    <p>Impacta la señal de desvinculación (máx. 10 pts del score)</p>
+                  </div>
+                </div>
+                <form id="form-biblioteca" class="form-grid">
+                  <div class="field">
+                    <label for="bib-alumno">Estudiante</label>
+                    <select id="bib-alumno" required></select>
+                  </div>
+                  <div class="field">
+                    <label for="bib-accion">Acción</label>
+                    <select id="bib-accion" required>
+                      <option value="PRESTAMO">PRÉSTAMO</option>
+                      <option value="LECTURA_SALA">LECTURA EN SALA</option>
+                      <option value="DEVOLUCION_TARDIA">DEVOLUCIÓN TARDÍA (+5 pts)</option>
+                      <option value="NO_DEVUELTO">NO DEVUELTO (+10 pts)</option>
+                    </select>
+                  </div>
+                  <div class="field" style="grid-column: 1 / -1;">
+                    <label for="bib-libro">Título del libro</label>
+                    <input id="bib-libro" type="text" maxlength="110" placeholder="Ej. Álgebra Moderna 4" required>
+                  </div>
+                  <button type="submit" class="btn btn-primary">Guardar Movimiento</button>
+                </form>
+                <div id="toast-biblioteca" class="toast-ok" hidden></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>Historial Reciente de Convivencia</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Estudiante</th>
+                      <th>Tipo</th>
+                      <th>Gravedad</th>
+                      <th>Descripción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tabla-incidencias"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- VISTA 4: INTERVENCIONES TUTORIALES -->
           <div id="view-intervenciones" hidden>
             <div class="card">
               <div class="card-head">
@@ -213,6 +385,7 @@
                       <th>Motivo</th>
                       <th>Acción Acordada</th>
                       <th>Estado</th>
+                      <th>Acción</th>
                     </tr>
                   </thead>
                   <tbody id="tabla-intervenciones"></tbody>
@@ -221,7 +394,49 @@
             </div>
           </div>
 
-          <!-- VISTA 3: PROTOCOLOS MINEDU (RAG) -->
+          <!-- VISTA 5: MATRÍCULA DE ALUMNOS -->
+          <div id="view-alumnos" hidden>
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>Matricular Nuevo Estudiante (Datos Simulados)</h2>
+                  <p>Asigna automáticamente código de estudiante y tarjeta RFID en PostgreSQL</p>
+                </div>
+              </div>
+              <form id="form-alumno" class="form-grid">
+                <div class="field">
+                  <label for="alu-nombre">Nombre completo (ficticio)</label>
+                  <input id="alu-nombre" type="text" maxlength="95" placeholder="Ej. Alejandro Ríos Vela" required>
+                </div>
+                <div class="field">
+                  <label for="alu-grado">Grado</label>
+                  <select id="alu-grado" required>
+                    <option value="1ro Secundaria">1ro Secundaria</option>
+                    <option value="2do Secundaria">2do Secundaria</option>
+                    <option value="3ro Secundaria" selected>3ro Secundaria</option>
+                    <option value="4to Secundaria">4to Secundaria</option>
+                    <option value="5to Secundaria">5to Secundaria</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="alu-seccion">Sección</label>
+                  <select id="alu-seccion" required>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="alu-apoderado">Apoderado (Demo)</label>
+                  <input id="alu-apoderado" type="text" maxlength="95" placeholder="Ej. María Vela (Demo)" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Matricular Estudiante</button>
+              </form>
+              <div id="toast-alumno" class="toast-ok" hidden></div>
+            </div>
+          </div>
+
+          <!-- VISTA 6: PROTOCOLOS MINEDU (RAG) -->
           <div id="view-protocolos" hidden>
             <div class="card">
               <div class="card-head">

@@ -149,6 +149,37 @@ class RfidScanEntrada(BaseModel):
     estado: str
 
 
+class NotaEntrada(BaseModel):
+    alumno_id: int
+    curso: str
+    bimestre: int
+    nota: float
+
+
+class IncidenciaEntrada(BaseModel):
+    alumno_id: int
+    tipo: str
+    gravedad: str
+    descripcion: str
+
+
+class BibliotecaEntrada(BaseModel):
+    alumno_id: int
+    accion: str
+    libro: str
+
+
+class AlumnoEntrada(BaseModel):
+    nombre_completo: str
+    grado: str
+    seccion: str
+    apoderado_nombre: str
+
+
+class IntervencionEstadoEntrada(BaseModel):
+    estado: str
+
+
 @app.get('/api/mcp-logs')
 def api_mcp_logs():
     """Devuelve las últimas llamadas reales al servidor MCP (Rayos X del Agente)."""
@@ -185,6 +216,153 @@ def api_rfid_scan(entrada: RfidScanEntrada):
     except Exception as exc:
         print('[APP] Error escáner RFID:', exc)
         return JSONResponse({'error': 'No se pudo registrar lectura RFID'}, status_code=500)
+
+
+@app.get('/api/notas')
+def api_listar_notas():
+    try:
+        filas = consultar(
+            """SELECT n.id, n.alumno_id, a.nombre_completo, a.grado, a.seccion,
+                      n.curso, n.bimestre, n.nota, n.fecha_registro
+               FROM notas n JOIN alumnos a ON a.id = n.alumno_id
+               ORDER BY n.id DESC LIMIT 40"""
+        )
+        return {'notas': filas}
+    except Exception as exc:
+        print('[APP] Error listando notas:', exc)
+        return JSONResponse({'error': 'No se pudieron cargar las notas'}, status_code=500)
+
+
+@app.post('/api/notas')
+def api_crear_nota(entrada: NotaEntrada):
+    if entrada.nota < 0 or entrada.nota > 20 or entrada.bimestre not in (1, 2, 3, 4):
+        return JSONResponse({'error': 'La nota debe estar entre 0 y 20, y el bimestre entre 1 y 4.'}, status_code=400)
+    try:
+        hoy = datetime.now().strftime('%Y-%m-%d')
+        with obtener_conexion() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """INSERT INTO notas (alumno_id, curso, bimestre, nota, fecha_registro)
+                       VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                    (entrada.alumno_id, entrada.curso.strip(), entrada.bimestre, round(entrada.nota, 2), hoy),
+                )
+                creado = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'id': creado['id'], 'mensaje': f'Nota {entrada.nota} en {entrada.curso} registrada y semáforo recalculado.'}
+    except Exception as exc:
+        print('[APP] Error registrando nota:', exc)
+        return JSONResponse({'error': 'No se pudo registrar la nota'}, status_code=500)
+
+
+@app.get('/api/convivencia')
+def api_listar_convivencia():
+    try:
+        incidencias = consultar(
+            """SELECT i.id, i.alumno_id, a.nombre_completo, a.grado, a.seccion,
+                      i.fecha, i.tipo, i.gravedad, i.descripcion
+               FROM incidencias_convivencia i JOIN alumnos a ON a.id = i.alumno_id
+               ORDER BY i.id DESC LIMIT 30"""
+        )
+        biblioteca = consultar(
+            """SELECT b.id, b.alumno_id, a.nombre_completo, a.grado, a.seccion,
+                      b.fecha, b.accion, b.libro
+               FROM biblioteca_uso b JOIN alumnos a ON a.id = b.alumno_id
+               ORDER BY b.id DESC LIMIT 30"""
+        )
+        return {'incidencias': incidencias, 'biblioteca': biblioteca}
+    except Exception as exc:
+        print('[APP] Error listando convivencia/biblioteca:', exc)
+        return JSONResponse({'error': 'No se pudieron cargar los registros'}, status_code=500)
+
+
+@app.post('/api/incidencias')
+def api_crear_incidencia(entrada: IncidenciaEntrada):
+    tipo = entrada.tipo.upper().strip()
+    gravedad = entrada.gravedad.upper().strip()
+    if tipo not in ('DISRUPCION', 'CONFLICTO', 'AISLAMIENTO', 'RECONOCIMIENTO') or gravedad not in ('BAJA', 'MEDIA', 'ALTA'):
+        return JSONResponse({'error': 'Tipo o gravedad inválidos.'}, status_code=400)
+    try:
+        hoy = datetime.now().strftime('%Y-%m-%d')
+        with obtener_conexion() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """INSERT INTO incidencias_convivencia (alumno_id, fecha, tipo, gravedad, descripcion)
+                       VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                    (entrada.alumno_id, hoy, tipo, gravedad, entrada.descripcion.strip()[:250]),
+                )
+                creado = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'id': creado['id'], 'mensaje': f'Incidencia ({tipo} · {gravedad}) registrada y score actualizado.'}
+    except Exception as exc:
+        print('[APP] Error registrando incidencia:', exc)
+        return JSONResponse({'error': 'No se pudo registrar la incidencia'}, status_code=500)
+
+
+@app.post('/api/biblioteca')
+def api_crear_biblioteca(entrada: BibliotecaEntrada):
+    accion = entrada.accion.upper().strip()
+    if accion not in ('PRESTAMO', 'LECTURA_SALA', 'DEVOLUCION_TARDIA', 'NO_DEVUELTO'):
+        return JSONResponse({'error': 'Acción de biblioteca inválida.'}, status_code=400)
+    try:
+        hoy = datetime.now().strftime('%Y-%m-%d')
+        with obtener_conexion() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """INSERT INTO biblioteca_uso (alumno_id, fecha, accion, libro)
+                       VALUES (%s, %s, %s, %s) RETURNING id""",
+                    (entrada.alumno_id, hoy, accion, entrada.libro.strip()[:115]),
+                )
+                creado = cur.fetchone()
+            conn.commit()
+        return {'ok': True, 'id': creado['id'], 'mensaje': f'Movimiento de biblioteca ({accion}) registrado.'}
+    except Exception as exc:
+        print('[APP] Error registrando biblioteca:', exc)
+        return JSONResponse({'error': 'No se pudo registrar movimiento de biblioteca'}, status_code=500)
+
+
+@app.post('/api/alumnos')
+def api_crear_alumno(entrada: AlumnoEntrada):
+    nombre = entrada.nombre_completo.strip()
+    if len(nombre) < 4:
+        return JSONResponse({'error': 'Ingrese nombre y apellido del estudiante.'}, status_code=400)
+    try:
+        with obtener_conexion() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT COALESCE(MAX(id), 0) + 1 AS sig FROM alumnos")
+                sig = int(cur.fetchone()['sig'])
+                codigo = f"EST-2026-{sig:03d}"
+                rfid = f"RFID-A{100 + sig}"
+                contacto = f"apoderado{sig:02d}@demo.sige360.local"
+                cur.execute(
+                    """INSERT INTO alumnos (codigo_estudiante, codigo_rfid, nombre_completo, grado, seccion, apoderado_nombre, apoderado_contacto)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, codigo_estudiante, codigo_rfid""",
+                    (codigo, rfid, nombre, entrada.grado.strip(), entrada.seccion.strip()[:1].upper(), entrada.apoderado_nombre.strip() or 'Apoderado (Demo)', contacto),
+                )
+                creado = dict(cur.fetchone())
+            conn.commit()
+        return {'ok': True, 'alumno': creado, 'mensaje': f'Estudiante {nombre} matriculado ({codigo} · {rfid}).'}
+    except Exception as exc:
+        print('[APP] Error creando alumno:', exc)
+        return JSONResponse({'error': 'No se pudo registrar el estudiante'}, status_code=500)
+
+
+@app.patch('/api/intervenciones/{intervencion_id}')
+def api_actualizar_intervencion(intervencion_id: int, entrada: IntervencionEstadoEntrada):
+    estado = entrada.estado.upper().strip()
+    if estado not in ('PROGRAMADA', 'SEGUIMIENTO', 'REALIZADA'):
+        return JSONResponse({'error': 'Estado inválido'}, status_code=400)
+    try:
+        with obtener_conexion() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE intervenciones_tutoriales SET estado = %s WHERE id = %s",
+                    (estado, intervencion_id),
+                )
+            conn.commit()
+        return {'ok': True, 'estado': estado}
+    except Exception as exc:
+        print('[APP] Error actualizando intervención:', exc)
+        return JSONResponse({'error': 'No se pudo actualizar estado'}, status_code=500)
 
 
 @app.get('/api/sesion')
