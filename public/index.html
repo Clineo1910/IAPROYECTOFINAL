@@ -246,19 +246,27 @@
               </div>
 
               <div class="table-wrap">
-                <table>
+                <table class="acta-table">
                   <thead>
                     <tr>
-                      <th>Código</th>
                       <th>Estudiante</th>
-                      <th>Sección</th>
-                      <th>Prom. Actual</th>
-                      <th>Riesgo Actual</th>
-                      <th>Nota del Curso (0–20)</th>
+                      <th>Sec.</th>
+                      <th>N1</th>
+                      <th>N2</th>
+                      <th>N3</th>
+                      <th>N4</th>
+                      <th>Prom. Perm.<br><small>40%</small></th>
+                      <th>Ex. Parcial<br><small>30%</small></th>
+                      <th>Ex. Final<br><small>30%</small></th>
+                      <th>Nota Final</th>
                     </tr>
                   </thead>
                   <tbody id="tabla-acta-grado"></tbody>
                 </table>
+              </div>
+              <div class="acta-footer">
+                <span id="acta-promedio-aula">Promedio del aula: --</span>
+                <span style="color:#64748b;font-weight:500;font-size:0.76rem;">Fórmula: Prom. Perm. (40%) + Ex. Parcial (30%) + Ex. Final (30%)</span>
               </div>
               <div id="toast-nota" class="toast-ok" hidden></div>
             </div>

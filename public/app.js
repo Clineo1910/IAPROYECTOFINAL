@@ -624,6 +624,49 @@ function mostrarToast(id, texto) {
 
 let notasCache = [];
 
+function recalcularFilaActa(tr) {
+  const num = (cls) => {
+    const v = tr.querySelector(`.${cls}`)?.value;
+    return v === '' || v === undefined ? 0 : Math.min(20, Math.max(0, Number(v)));
+  };
+  const tieneAlguna = ['g-n1', 'g-n2', 'g-n3', 'g-n4', 'g-parcial', 'g-final'].some(
+    (cls) => tr.querySelector(`.${cls}`)?.value !== ''
+  );
+
+  const promPerm = (num('g-n1') + num('g-n2') + num('g-n3') + num('g-n4')) / 4;
+  const exParcial = num('g-parcial');
+  const exFinal = num('g-final');
+  const notaFinal = Math.round(promPerm * 0.4 + exParcial * 0.3 + exFinal * 0.3);
+
+  const tdPerm = tr.querySelector('.prom-cell');
+  const badgeFinal = tr.querySelector('.nota-final-badge');
+  tdPerm.textContent = tieneAlguna ? promPerm.toFixed(2) : '-';
+
+  if (!tieneAlguna) {
+    badgeFinal.className = 'badge nota-final-badge';
+    badgeFinal.textContent = '--';
+    tr.dataset.notaFinal = '';
+  } else {
+    badgeFinal.className = `badge nota-final-badge ${notaFinal < 11 ? 'badge-ROJO' : (notaFinal < 14 ? 'badge-AMBAR' : 'badge-VERDE')}`;
+    badgeFinal.textContent = String(notaFinal);
+    tr.dataset.notaFinal = String(notaFinal);
+  }
+  actualizarPromedioAula();
+}
+
+function actualizarPromedioAula() {
+  const filas = [...document.querySelectorAll('#tabla-acta-grado tr[data-alumno-id]')];
+  const valores = filas.map((r) => r.dataset.notaFinal).filter((v) => v !== '').map(Number);
+  const el = document.getElementById('acta-promedio-aula');
+  if (!el) return;
+  if (valores.length === 0) {
+    el.textContent = 'Promedio del aula: -- (ingresa notas en la tabla)';
+    return;
+  }
+  const prom = valores.reduce((a, b) => a + b, 0) / valores.length;
+  el.textContent = `Promedio del aula (${valores.length} alumnos calificados): ${prom.toFixed(2)}`;
+}
+
 function renderActaPorGrado() {
   const tbody = document.getElementById('tabla-acta-grado');
   const grado = document.getElementById('acta-grado')?.value;
@@ -639,12 +682,13 @@ function renderActaPorGrado() {
   if (delGrado.length === 0) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = 6;
+    td.colSpan = 10;
     td.style.textAlign = 'center';
     td.style.color = '#64748b';
     td.textContent = 'No hay estudiantes matriculados en este grado.';
     tr.appendChild(td);
     tbody.appendChild(tr);
+    actualizarPromedioAula();
     return;
   }
 
@@ -652,35 +696,67 @@ function renderActaPorGrado() {
     const existente = notasCache.find(
       (n) => n.alumno_id === a.alumno_id && n.curso === curso && Number(n.bimestre) === bimestre
     );
+    const base = existente ? Number(existente.nota) : null;
+
     const tr = document.createElement('tr');
-    [a.codigo_estudiante, a.nombre_completo, `Sec. ${a.seccion}`, a.metricas.promedio_notas !== null ? a.metricas.promedio_notas.toFixed(1) : '-'].forEach((v) => {
+    tr.dataset.alumnoId = String(a.alumno_id);
+
+    // Estudiante
+    const tdNom = document.createElement('td');
+    const strong = document.createElement('strong');
+    strong.textContent = a.nombre_completo;
+    const cod = document.createElement('small');
+    cod.style.display = 'block';
+    cod.style.color = '#64748b';
+    cod.textContent = a.codigo_estudiante;
+    tdNom.append(strong, cod);
+    tr.appendChild(tdNom);
+
+    // Sección
+    const tdSec = document.createElement('td');
+    tdSec.textContent = a.seccion;
+    tr.appendChild(tdSec);
+
+    const crearInputTd = (cls, valInicial) => {
       const td = document.createElement('td');
-      td.textContent = String(v);
-      tr.appendChild(td);
-    });
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.min = '0';
+      inp.max = '20';
+      inp.step = '0.5';
+      inp.className = `grade-input ${cls}`;
+      if (valInicial !== null) inp.value = String(valInicial);
+      inp.addEventListener('input', () => recalcularFilaActa(tr));
+      td.appendChild(inp);
+      return td;
+    };
 
-    const tdR = document.createElement('td');
-    const br = document.createElement('span');
-    br.className = `badge badge-${a.nivel_semaforo}`;
-    br.textContent = `${a.indice_riesgo} (${a.nivel_semaforo})`;
-    tdR.appendChild(br);
-    tr.appendChild(tdR);
+    // N1..N4
+    tr.appendChild(crearInputTd('g-n1', base));
+    tr.appendChild(crearInputTd('g-n2', base));
+    tr.appendChild(crearInputTd('g-n3', base));
+    tr.appendChild(crearInputTd('g-n4', base));
 
-    const tdIn = document.createElement('td');
-    const inp = document.createElement('input');
-    inp.type = 'number';
-    inp.min = '0';
-    inp.max = '20';
-    inp.step = '0.5';
-    inp.placeholder = '0–20';
-    inp.dataset.alumnoId = String(a.alumno_id);
-    inp.className = 'search-input';
-    inp.style.width = '92px';
-    if (existente) inp.value = String(existente.nota);
-    tdIn.appendChild(inp);
-    tr.appendChild(tdIn);
+    // Prom. Perm. 40%
+    const tdPerm = document.createElement('td');
+    tdPerm.className = 'prom-cell';
+    tdPerm.textContent = '-';
+    tr.appendChild(tdPerm);
+
+    // Ex. Parcial 30% y Ex. Final 30%
+    tr.appendChild(crearInputTd('g-parcial', base));
+    tr.appendChild(crearInputTd('g-final', base));
+
+    // Nota Final
+    const tdFin = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = 'badge nota-final-badge';
+    badge.textContent = '--';
+    tdFin.appendChild(badge);
+    tr.appendChild(tdFin);
 
     tbody.appendChild(tr);
+    recalcularFilaActa(tr);
   });
 }
 
@@ -733,15 +809,15 @@ async function cargarNotas() {
 document.getElementById('btn-guardar-acta')?.addEventListener('click', async () => {
   const curso = document.getElementById('acta-curso').value;
   const bimestre = Number(document.getElementById('acta-bimestre').value);
-  const inputs = document.querySelectorAll('#tabla-acta-grado input[data-alumno-id]');
+  const filas = document.querySelectorAll('#tabla-acta-grado tr[data-alumno-id]');
   const calificaciones = [];
-  inputs.forEach((inp) => {
-    if (inp.value !== '') {
-      calificaciones.push({ alumno_id: Number(inp.dataset.alumnoId), nota: Number(inp.value) });
+  filas.forEach((tr) => {
+    if (tr.dataset.notaFinal !== '') {
+      calificaciones.push({ alumno_id: Number(tr.dataset.alumnoId), nota: Number(tr.dataset.notaFinal) });
     }
   });
   if (calificaciones.length === 0) {
-    mostrarToast('toast-nota', 'Ingrese al menos una nota (0–20) antes de guardar el acta.');
+    mostrarToast('toast-nota', 'Ingrese al menos una nota (N1–N4, Parcial o Final) antes de guardar el acta.');
     return;
   }
   const r = await fetch('/api/notas/lote', {
