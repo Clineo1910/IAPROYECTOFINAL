@@ -79,42 +79,6 @@
             </div>
             <div id="toast-nota" class="toast-ok" hidden></div>
           </div>
-
-          <div class="card">
-            <div class="card-head">
-              <div>
-                <h2>Historial de Calificaciones en PostgreSQL</h2>
-                <p>Filtrado por grado y curso</p>
-              </div>
-              <div class="toolbar">
-                <select id="filtro-notas-grado" class="search-input" style="width:165px;">
-                  <option value="TODOS">Todos los grados</option>
-                  <option value="1ro Secundaria">1ro Secundaria</option>
-                  <option value="2do Secundaria">2do Secundaria</option>
-                  <option value="3ro Secundaria">3ro Secundaria</option>
-                  <option value="4to Secundaria">4to Secundaria</option>
-                  <option value="5to Secundaria">5to Secundaria</option>
-                </select>
-                <select id="filtro-notas-curso" class="search-input" style="width:165px;">
-                  <option value="TODOS">Todos los cursos</option>
-                  <option value="Matemática">Matemática</option>
-                  <option value="Comunicación">Comunicación</option>
-                  <option value="Ciencia y Tecnología">Ciencia y Tecnología</option>
-                  <option value="Historia y Geografía">Historia y Geografía</option>
-                  <option value="Inglés">Inglés</option>
-                  <option value="Física">Física</option>
-                </select>
-              </div>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr><th>Estudiante</th><th>Grado</th><th>Curso</th><th>Bimestre</th><th>Nota</th><th>Fecha</th></tr>
-                </thead>
-                <tbody id="tabla-notas"></tbody>
-              </table>
-            </div>
-          </div>
         </section>
         <aside id="sige-chat-panel" class="chat-panel"></aside>
       </main>
@@ -206,32 +170,14 @@
       });
     }
 
-    function renderHistorial() {
-      const tbody = document.getElementById('tabla-notas');
-      const fg = document.getElementById('filtro-notas-grado').value;
-      const fc = document.getElementById('filtro-notas-curso').value;
-      tbody.textContent = '';
-      notasCache.filter((n) => (fg === 'TODOS' || n.grado === fg) && (fc === 'TODOS' || n.curso === fc)).slice(0, 60).forEach((n) => {
-        const tr = document.createElement('tr');
-        [n.nombre_completo, `${n.grado} ${n.seccion}`, n.curso, `Bim. ${n.bimestre}`].forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
-        const tdN = document.createElement('td');
-        const b = document.createElement('span'); b.className = 'badge ' + (n.nota < 11 ? 'badge-ROJO' : (n.nota < 14 ? 'badge-AMBAR' : 'badge-VERDE')); b.textContent = Number(n.nota).toFixed(1);
-        tdN.appendChild(b); tr.appendChild(tdN);
-        const tdF = document.createElement('td'); tdF.textContent = String(n.fecha_registro).slice(0, 10); tr.appendChild(tdF);
-        tbody.appendChild(tr);
-      });
-    }
-
     async function cargarTodo() {
       const [rd, rn] = await Promise.all([fetch('/api/dashboard'), fetch('/api/notas')]);
       alumnosCache = (await rd.json()).alumnos || [];
       notasCache = (await rn.json()).notas || [];
       renderActa();
-      renderHistorial();
     }
 
     ['acta-grado','acta-curso','acta-bimestre'].forEach((id) => document.getElementById(id).addEventListener('change', renderActa));
-    ['filtro-notas-grado','filtro-notas-curso'].forEach((id) => document.getElementById(id).addEventListener('change', renderHistorial));
 
     document.getElementById('btn-guardar-acta').addEventListener('click', async () => {
       const curso = document.getElementById('acta-curso').value;

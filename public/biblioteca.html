@@ -42,23 +42,6 @@
             </form>
             <div id="toast-bib" class="toast-ok" hidden></div>
           </div>
-
-          <div class="card">
-            <div class="card-head">
-              <div>
-                <h2>Historial de Biblioteca Escolar</h2>
-                <p>Préstamos, lectura en sala y devoluciones en vivo desde PostgreSQL</p>
-              </div>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr><th>Fecha</th><th>Estudiante</th><th>Libro</th><th>Estado</th></tr>
-                </thead>
-                <tbody id="tabla-biblioteca"></tbody>
-              </table>
-            </div>
-          </div>
         </section>
         <aside id="sige-chat-panel" class="chat-panel"></aside>
       </main>
@@ -68,7 +51,7 @@
   <script src="/layout.js"></script>
   <script>
     async function cargar() {
-      const [rd, rc] = await Promise.all([fetch('/api/dashboard'), fetch('/api/convivencia')]);
+      const rd = await fetch('/api/dashboard');
       const alumnos = ((await rd.json()).alumnos || []).sort((a, b) => a.alumno_id - b.alumno_id);
       const sel = document.getElementById('bib-alumno');
       if (sel.options.length === 0) {
@@ -79,18 +62,6 @@
           sel.appendChild(opt);
         });
       }
-      const tbody = document.getElementById('tabla-biblioteca');
-      tbody.textContent = '';
-      ((await rc.json()).biblioteca || []).forEach((bItem) => {
-        const tr = document.createElement('tr');
-        [String(bItem.fecha).slice(0, 10), `${bItem.nombre_completo} (${bItem.grado} ${bItem.seccion})`, bItem.libro].forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
-        const tdA = document.createElement('td');
-        const b = document.createElement('span');
-        b.className = 'badge ' + (bItem.accion === 'NO_DEVUELTO' ? 'badge-ROJO' : (bItem.accion === 'DEVOLUCION_TARDIA' ? 'badge-AMBAR' : 'badge-VERDE'));
-        b.textContent = bItem.accion;
-        tdA.appendChild(b); tr.appendChild(tdA);
-        tbody.appendChild(tr);
-      });
     }
 
     document.getElementById('form-biblioteca').addEventListener('submit', async (ev) => {

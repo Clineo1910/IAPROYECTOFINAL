@@ -50,23 +50,6 @@
             </form>
             <div id="toast-inc" class="toast-ok" hidden></div>
           </div>
-
-          <div class="card">
-            <div class="card-head">
-              <div>
-                <h2>Historial de Convivencia Escolar</h2>
-                <p>Registros en vivo desde PostgreSQL</p>
-              </div>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr><th>Fecha</th><th>Estudiante</th><th>Tipo</th><th>Gravedad</th><th>Descripción</th></tr>
-                </thead>
-                <tbody id="tabla-incidencias"></tbody>
-              </table>
-            </div>
-          </div>
         </section>
         <aside id="sige-chat-panel" class="chat-panel"></aside>
       </main>
@@ -76,7 +59,7 @@
   <script src="/layout.js"></script>
   <script>
     async function cargar() {
-      const [rd, rc] = await Promise.all([fetch('/api/dashboard'), fetch('/api/convivencia')]);
+      const rd = await fetch('/api/dashboard');
       const alumnos = ((await rd.json()).alumnos || []).sort((a, b) => a.alumno_id - b.alumno_id);
       const sel = document.getElementById('inc-alumno');
       if (sel.options.length === 0) {
@@ -87,17 +70,6 @@
           sel.appendChild(opt);
         });
       }
-      const tbody = document.getElementById('tabla-incidencias');
-      tbody.textContent = '';
-      ((await rc.json()).incidencias || []).forEach((i) => {
-        const tr = document.createElement('tr');
-        [String(i.fecha).slice(0, 10), `${i.nombre_completo} (${i.grado} ${i.seccion})`, i.tipo].forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
-        const tdG = document.createElement('td');
-        const b = document.createElement('span'); b.className = 'badge ' + (i.gravedad === 'ALTA' ? 'badge-ROJO' : (i.gravedad === 'MEDIA' ? 'badge-AMBAR' : 'badge-VERDE')); b.textContent = i.gravedad;
-        tdG.appendChild(b); tr.appendChild(tdG);
-        const tdD = document.createElement('td'); tdD.textContent = i.descripcion; tr.appendChild(tdD);
-        tbody.appendChild(tr);
-      });
     }
 
     document.getElementById('form-incidencia').addEventListener('submit', async (ev) => {
