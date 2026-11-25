@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SIGE-360 | Panel Predictivo</title>
+  <title>SIGE-360 | Panel Ejecutivo</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -13,62 +13,79 @@
       <header id="sige-topbar" class="topbar"></header>
       <main class="workspace">
         <section class="content-col">
+          <!-- KPIs Principales -->
           <div class="kpi-grid">
             <div class="kpi kpi-total">
-              <div class="kpi-head"><span class="kpi-title">Estudiantes Monitoreados</span><span class="kpi-icon">∑</span></div>
+              <div class="kpi-head"><span class="kpi-title">Total Estudiantes</span><span class="kpi-icon">∑</span></div>
               <div id="kpi-total" class="kpi-val">--</div>
               <div id="kpi-prom-riesgo" class="kpi-sub">Índice promedio: --</div>
             </div>
             <div class="kpi kpi-rojo">
-              <div class="kpi-head"><span class="kpi-title">Alerta Roja (≥ 60)</span><span class="kpi-icon">!</span></div>
+              <div class="kpi-head"><span class="kpi-title">Alerta Roja (Urgente)</span><span class="kpi-icon">!</span></div>
               <div id="kpi-rojo" class="kpi-val">--</div>
-              <div class="kpi-sub">Atención tutorial &lt; 24h</div>
+              <div class="kpi-sub">Contactar familia &lt; 24h</div>
             </div>
             <div class="kpi kpi-ambar">
-              <div class="kpi-head"><span class="kpi-title">Alerta Ámbar (30–59)</span><span class="kpi-icon">▲</span></div>
+              <div class="kpi-head"><span class="kpi-title">Alerta Ámbar (Preventiva)</span><span class="kpi-icon">▲</span></div>
               <div id="kpi-ambar" class="kpi-val">--</div>
-              <div class="kpi-sub">Seguimiento preventivo</div>
+              <div class="kpi-sub">Seguimiento semanal</div>
             </div>
             <div class="kpi kpi-verde">
-              <div class="kpi-head"><span class="kpi-title">Estado Verde (&lt; 30)</span><span class="kpi-icon">✓</span></div>
+              <div class="kpi-head"><span class="kpi-title">Trayectoria Estable</span><span class="kpi-icon">✓</span></div>
               <div id="kpi-verde" class="kpi-val">--</div>
-              <div class="kpi-sub">Trayectoria estable</div>
+              <div class="kpi-sub">Sin señales de riesgo</div>
             </div>
           </div>
 
-          <div class="analytics-grid">
-            <div class="card" style="margin-bottom:0;">
-              <div class="card-head">
-                <div>
-                  <h2>Distribución Institucional del Semáforo</h2>
-                  <p>4 señales: Asistencia (40), Notas (30), Convivencia (20), Biblioteca (10)</p>
-                </div>
+          <!-- Casos Prioritarios de Hoy (Solo alertas críticas, NO lista de 300 alumnos) -->
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Atención Prioritaria de Hoy (Top 5 en Riesgo)</h2>
+                <p>Solo se muestran los casos que requieren acción inmediata del tutor. Usa el buscador para consultar cualquier otro alumno.</p>
               </div>
-              <div class="dist-bar">
-                <div id="bar-rojo" class="dist-seg-rojo" style="width:0%"></div>
-                <div id="bar-ambar" class="dist-seg-ambar" style="width:0%"></div>
-                <div id="bar-verde" class="dist-seg-verde" style="width:0%"></div>
+              <div class="toolbar">
+                <select id="buscador-rapido" class="search-input" style="width:230px;" aria-label="Abrir Ficha 360° de cualquier estudiante">
+                  <option value="">Buscar Ficha 360° de un alumno...</option>
+                </select>
               </div>
-              <div id="dist-legend" class="dist-legend">Cargando distribución...</div>
             </div>
+            <div id="db-error" class="badge badge-ROJO" hidden style="margin-bottom:10px;"></div>
+            <div id="lista-prioritarios" style="display:flex;flex-direction:column;gap:10px;"></div>
+          </div>
 
-            <div class="card" style="margin-bottom:0;">
-              <div class="card-head">
-                <div>
-                  <h2>Riesgo por Grado Académico</h2>
-                  <p>Mapa de calor de alertas (1ro a 5to Secundaria)</p>
-                </div>
+          <!-- Resumen Ejecutivo por Grado (Tabla clara en lugar de barras confusas) -->
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Resumen Institucional por Grado</h2>
+                <p>Consolidado en tiempo real de alertas y promedio académico por grado</p>
               </div>
-              <div id="grade-chart" class="grade-chart"></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Grado</th>
+                    <th>Estudiantes</th>
+                    <th>Alerta Roja</th>
+                    <th>Alerta Ámbar</th>
+                    <th>Estables (Verde)</th>
+                    <th>Prom. Notas</th>
+                  </tr>
+                </thead>
+                <tbody id="tabla-resumen-grados"></tbody>
+              </table>
             </div>
           </div>
 
+          <!-- Factor Wow RFID -->
           <div class="card wow-banner">
             <div style="width:100%;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:14px;">
               <div>
-                <span class="wow-pill">● FACTOR WOW · SIMULADOR IoT RFID + TELEGRAM</span>
+                <span class="wow-pill">● SIMULADOR IoT · LECTOR RFID DE PUERTA</span>
                 <h2>Detección Temprana Automática de Deserción</h2>
-                <p>Simula 3 faltas RFID + nota <strong>06</strong> en Matemática para <strong>Lucas Mendoza Paredes (ID 3)</strong>. El semáforo pasa a <strong>ROJO</strong>, SIGE-Bot redacta el mensaje y puedes enviarlo por <strong>Telegram</strong> al apoderado en 1 clic.</p>
+                <p>Simula 3 faltas consecutivas + nota <strong>06</strong> en Matemática para <strong>Lucas Mendoza Paredes (ID 3)</strong>. El semáforo pasa a <strong>ROJO</strong>, SIGE-Bot redacta el mensaje y puedes enviarlo por <strong>Telegram</strong> al apoderado.</p>
               </div>
               <div class="wow-actions">
                 <button id="btn-simular-rfid" class="btn btn-danger" type="button">Simular 3 faltas RFID + Nota 06</button>
@@ -76,51 +93,18 @@
               </div>
             </div>
             <div class="rfid-console" style="width:100%;">
-              <span style="font-size:0.78rem;color:#94a3b8;font-weight:600;">Lector RFID manual:</span>
+              <span style="font-size:0.78rem;color:#94a3b8;font-weight:600;">Registro manual RFID:</span>
               <select id="rfid-alumno" class="rfid-select" aria-label="Seleccionar estudiante"></select>
               <select id="rfid-estado" class="rfid-select" aria-label="Estado RFID">
                 <option value="PRESENTE">PRESENTE (Ingreso puntual)</option>
                 <option value="TARDANZA">TARDANZA</option>
                 <option value="FALTA">FALTA (Ausencia)</option>
               </select>
-              <button id="btn-rfid-manual" class="btn btn-primary" type="button">Escanear Tarjeta RFID</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <div>
-                <h2>Semáforo Predictivo de Estudiantes</h2>
-                <p>Haz clic en cualquier estudiante para abrir su Ficha 360° completa</p>
-              </div>
-              <div class="toolbar">
-                <input id="buscar-alumno" class="search-input" type="search" placeholder="Buscar por nombre o código...">
-                <button type="button" class="filter-pill active" data-filter="TODOS">Todos</button>
-                <button type="button" class="filter-pill" data-filter="ROJO">Rojo</button>
-                <button type="button" class="filter-pill" data-filter="AMBAR">Ámbar</button>
-                <button type="button" class="filter-pill" data-filter="VERDE">Verde</button>
-              </div>
-            </div>
-            <div id="db-error" class="badge badge-ROJO" hidden style="margin-bottom:10px;"></div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Estudiante</th>
-                    <th>Grado</th>
-                    <th>Promedio</th>
-                    <th>Faltas</th>
-                    <th>Índice de Riesgo</th>
-                    <th>Semáforo</th>
-                  </tr>
-                </thead>
-                <tbody id="tabla-alumnos">
-                  <tr><td colspan="6" style="text-align:center;color:#64748b;">Cargando datos desde PostgreSQL...</td></tr>
-                </tbody>
-              </table>
+              <button id="btn-rfid-manual" class="btn btn-primary" type="button">Registrar Lectura</button>
             </div>
           </div>
         </section>
+
         <aside id="sige-chat-panel" class="chat-panel"></aside>
       </main>
     </div>

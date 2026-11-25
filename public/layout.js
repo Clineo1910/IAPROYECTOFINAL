@@ -289,28 +289,15 @@ window.SIGE = {
       msgs.id = 'chat-mensajes';
       msgs.className = 'chat-messages';
 
-      const xray = document.createElement('div');
-      xray.className = 'mcp-xray';
-      const xHead = document.createElement('div');
-      xHead.className = 'mcp-xray-head';
-      const xTitle = document.createElement('span');
-      xTitle.textContent = '⚡ RAYOS X · HERRAMIENTAS MCP EN VIVO';
-      const xCnt = document.createElement('span');
-      xCnt.id = 'mcp-count';
-      xCnt.textContent = '0 llamadas';
-      xHead.append(xTitle, xCnt);
-      const xList = document.createElement('div');
-      xList.id = 'mcp-xray-list';
-      xList.className = 'mcp-xray-list';
-      xray.append(xHead, xList);
-
       const chips = document.createElement('div');
       chips.className = 'chat-chips';
       [
-        ['Alumnos en rojo', '¿Qué alumnos están en alerta roja hoy?'],
-        ['Notas < 11 por curso', 'Lístame los estudiantes con notas menores a 11 y en qué cursos están así'],
-        ['Riesgo Mateo (ID 1)', 'Calcula el índice de riesgo del alumno con ID 1'],
-        ['Protocolo 3 faltas', '¿Qué indica el protocolo MINEDU ante 3 faltas consecutivas?'],
+        ['¿Quiénes están en riesgo hoy?', '¿Qué alumnos están en alerta roja y necesitan atención urgente hoy?'],
+        ['Desaprobados por curso', 'Lístame los estudiantes con notas menores a 11 y en qué cursos están así'],
+        ['Reporte de Mateo Quispe', 'Dame el historial completo, notas, faltas y convivencia de Mateo Quispe'],
+        ['Caso Diego Huamán', '¿Cuál es la situación actual y qué intervenciones tiene Diego Huamán?'],
+        ['Protocolo 3 faltas', '¿Qué indica el protocolo MINEDU cuando un alumno falta 3 días seguidos?'],
+        ['Protocolo aislamiento', '¿Qué protocolo de convivencia aplico si un alumno presenta aislamiento en clase?'],
         ['Registrar intervención', 'Registra una intervención tutorial para Lucas Mendoza (ID 3) por seguimiento en Matemática con refuerzo los miércoles'],
       ].forEach(([lbl, prompt]) => {
         const b = document.createElement('button');
@@ -343,15 +330,13 @@ window.SIGE = {
         await window.SIGE.enviarConsultaAlAgente(txt);
       });
 
-      chatHost.append(head, msgs, xray, chips, form);
+      chatHost.append(head, msgs, chips, form);
       window.SIGE.agregarBurbuja(
         'SIGE-Bot · IA Preventiva (Ley N.° 31814)',
         'Hola, soy el asistente de inteligencia artificial de SIGE-360. Consulto en tiempo real notas, asistencia RFID, convivencia, biblioteca y protocolos MINEDU.',
         false,
         false
       );
-      window.SIGE.cargarMcpLogs();
-      setInterval(window.SIGE.cargarMcpLogs, 5000);
     }
   },
 };
