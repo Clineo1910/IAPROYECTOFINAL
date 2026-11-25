@@ -1,6 +1,9 @@
 # app.py - Aplicación web SIGE-360 en Python (FastAPI + PostgreSQL + Auth RBAC + puente a n8n)
 import os
 import json
+import re
+import time
+import threading
 import uuid
 from datetime import datetime
 import requests
@@ -59,6 +62,7 @@ SELECT
   a.seccion,
   a.apoderado_nombre,
   a.apoderado_contacto,
+  a.telegram_chat_id,
   (SELECT ROUND(AVG(n.nota)::numeric, 2) FROM notas n WHERE n.alumno_id = a.id) AS promedio,
   (SELECT COUNT(*) FROM asistencia s WHERE s.alumno_id = a.id AND s.estado = 'FALTA') AS faltas,
   (SELECT COUNT(*) FROM asistencia s WHERE s.alumno_id = a.id AND s.estado = 'TARDANZA') AS tardanzas,
@@ -107,6 +111,7 @@ def evaluar_fila(m: dict) -> dict:
         'seccion': m['seccion'],
         'apoderado_nombre': m['apoderado_nombre'],
         'apoderado_contacto': m.get('apoderado_contacto', ''),
+        'telegram_chat_id': m.get('telegram_chat_id'),
         'indice_riesgo': score,
         'nivel_semaforo': nivel,
         'desglose': {
@@ -205,6 +210,7 @@ class UsuarioNuevoEntrada(BaseModel):
     rol: str = 'padre'
     nombre: str
     alumno_id: int | None = None
+    telegram_chat_id: str | None = None
 
 
 class AlertaTelegramEntrada(BaseModel):
@@ -744,6 +750,11 @@ def api_crear_usuario(entrada: UsuarioNuevoEntrada, request: Request):
                     (email, entrada.password, rol, entrada.nombre.strip(), cargo, entrada.alumno_id if rol == 'padre' else None),
                 )
                 creado = dict(cur.fetchone())
+                if rol == 'padre' and entrada.alumno_id and entrada.telegram_chat_id and entrada.telegram_chat_id.strip():
+                    cur.execute(
+                        "UPDATE alumnos SET telegram_chat_id = %s WHERE id = %s",
+                        (entrada.telegram_chat_id.strip(), entrada.alumno_id),
+                    )
             conn.commit()
         return {'ok': True, 'usuario': creado, 'mensaje': f'Cuenta creada ({email} · rol {rol}). Ya puede iniciar sesión en /login.html.'}
     except Exception as exc:
@@ -764,24 +775,35 @@ def api_enviar_telegram(entrada: AlertaTelegramEntrada, request: Request):
     # Recarga .env por si el usuario acaba de pegar su token de @BotFather
     load_dotenv(os.path.join(RAIZ, '.env'), override=True)
     token = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
-    chat_id = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
+    chat_id_destino = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
+    origen_destino = 'chat demo (.env)'
+
+    # Si el alumno tiene su propio apoderado vinculado en PostgreSQL, usar ese chat_id
+    if entrada.alumno_id:
+        filas_tg = consultar(
+            "SELECT nombre_completo, telegram_chat_id FROM alumnos WHERE id = %s LIMIT 1",
+            (entrada.alumno_id,),
+        )
+        if filas_tg and filas_tg[0].get('telegram_chat_id'):
+            chat_id_destino = str(filas_tg[0]['telegram_chat_id']).strip()
+            origen_destino = f"apoderado vinculado de {filas_tg[0]['nombre_completo']}"
 
     enviado_externo = False
     detalle = 'Guardado en Portal de Padres (configura TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en .env para envío al celular).'
 
-    if token and chat_id:
+    if token and chat_id_destino:
         try:
             r = requests.post(
                 f'https://api.telegram.org/bot{token}/sendMessage',
-                json={'chat_id': chat_id, 'text': f'🏫 SIGE-360 · Alerta al Apoderado\n\n{texto}'},
+                json={'chat_id': chat_id_destino, 'text': f'🏫 SIGE-360 · Alerta al Apoderado\n\n{texto}'},
                 timeout=10,
             )
             r.raise_for_status()
             enviado_externo = True
-            detalle = 'Enviado en vivo por Telegram Bot API y publicado en Portal de Padres.'
+            detalle = f'Enviado en vivo por Telegram ({origen_destino}) y publicado en Portal de Padres.'
         except Exception as exc:
             print('[TELEGRAM] Error:', exc)
-            detalle = 'Guardado en Portal de Padres (Telegram no respondió; verifica tu token/chat_id en .env).'
+            detalle = 'Guardado en Portal de Padres (Telegram no respondió; verifica tu token/chat_id).'
 
     try:
         with obtener_conexion() as conn:
@@ -796,6 +818,86 @@ def api_enviar_telegram(entrada: AlertaTelegramEntrada, request: Request):
         print('[APP] Error guardando alerta:', exc)
 
     return {'ok': True, 'enviado_telegram': enviado_externo, 'mensaje': detalle}
+
+
+# ==================== AUTO-VINCULACIÓN DE PADRES VÍA TELEGRAM BOT ====================
+def _bucle_vinculacion_telegram():
+    """Escucha mensajes a @SIGE360_Alertas_Bot para vincular padres por código de estudiante (ej. EST-2026-003)."""
+    offset = 0
+    # Descarta mensajes antiguos al arrancar
+    load_dotenv(os.path.join(RAIZ, '.env'), override=True)
+    token = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
+    if not token:
+        return
+    try:
+        init = requests.get(f'https://api.telegram.org/bot{token}/getUpdates', timeout=8).json()
+        res = init.get('result', [])
+        if res:
+            offset = res[-1]['update_id'] + 1
+    except Exception:
+        pass
+
+    patron_codigo = re.compile(r'EST-\d{4}-\d{3}', re.IGNORECASE)
+    while True:
+        try:
+            resp = requests.get(
+                f'https://api.telegram.org/bot{token}/getUpdates',
+                params={'offset': offset, 'timeout': 5},
+                timeout=10,
+            ).json()
+            for upd in resp.get('result', []):
+                offset = upd['update_id'] + 1
+                msg = upd.get('message') or {}
+                chat_id = (msg.get('chat') or {}).get('id')
+                texto = (msg.get('text') or '').strip()
+                if not chat_id or not texto:
+                    continue
+
+                match = patron_codigo.search(texto)
+                if match:
+                    codigo = match.group(0).upper()
+                    filas = consultar(
+                        "SELECT id, nombre_completo, grado, seccion FROM alumnos WHERE UPPER(codigo_estudiante) = %s LIMIT 1",
+                        (codigo,),
+                    )
+                    if filas:
+                        al = filas[0]
+                        with obtener_conexion() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    "UPDATE alumnos SET telegram_chat_id = %s WHERE id = %s",
+                                    (str(chat_id), al['id']),
+                                )
+                            conn.commit()
+                        respuesta_bot = (
+                            f"✅ ¡Vinculación exitosa!\n"
+                            f"Tu Telegram (ID {chat_id}) quedó asociado al estudiante:\n"
+                            f"• {al['nombre_completo']} ({codigo} · {al['grado']} {al['seccion']})\n\n"
+                            f"Recibirás aquí las alertas tempranas de asistencia y rendimiento de SIGE-360."
+                        )
+                    else:
+                        respuesta_bot = f"⚠️ No encontramos ningún estudiante con el código {codigo}. Verifica el código (ej. EST-2026-003)."
+                else:
+                    respuesta_bot = (
+                        "🏫 Bienvenido a SIGE-360 Alertas.\n"
+                        "Para vincular tu celular con tu hijo/a, envíame su código de estudiante (ejemplo: EST-2026-003).\n"
+                        "Por protección de datos (Ley N.° 29733), usamos códigos escolares simulados y no DNIs reales."
+                    )
+
+                requests.post(
+                    f'https://api.telegram.org/bot{token}/sendMessage',
+                    json={'chat_id': chat_id, 'text': respuesta_bot},
+                    timeout=8,
+                )
+        except Exception:
+            time.sleep(4)
+        time.sleep(2)
+
+
+@app.on_event('startup')
+def iniciar_listener_telegram():
+    hilo = threading.Thread(target=_bucle_vinculacion_telegram, daemon=True)
+    hilo.start()
 
 
 # ==================== RUTAS PROTEGIDAS DE PÁGINAS (MULTIPÁGINA REAL) ====================

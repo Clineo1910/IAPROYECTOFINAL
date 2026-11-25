@@ -13,6 +13,15 @@
       <header id="sige-topbar" class="topbar"></header>
       <main class="workspace">
         <section class="content-col">
+          <!-- Banner Auto-Vinculación Telegram -->
+          <div class="card wow-banner">
+            <div>
+              <span class="wow-pill">✈ AUTO-VINCULACIÓN TELEGRAM · LEY N.° 29733</span>
+              <h2>Vinculación Automática de Padres vía @SIGE360_Alertas_Bot</h2>
+              <p>Para proteger datos personales (sin DNIs reales), cualquier apoderado solo debe abrir <strong>@SIGE360_Alertas_Bot</strong> en Telegram y escribir el código de su hijo (ej. <strong>EST-2026-003</strong>). SIGE-360 guarda automáticamente su <code>telegram_chat_id</code> en PostgreSQL y le confirma la vinculación al instante.</p>
+            </div>
+          </div>
+
           <!-- Crear Cuenta de Padre / Docente -->
           <div class="card">
             <div class="card-head">
@@ -44,6 +53,10 @@
               <div class="field" id="wrap-hijo">
                 <label for="usr-alumno">Vincular a su hijo/a</label>
                 <select id="usr-alumno"></select>
+              </div>
+              <div class="field" id="wrap-tg">
+                <label for="usr-tg">Telegram Chat ID (opcional)</label>
+                <input id="usr-tg" type="text" placeholder="Auto vía bot o ej. 2074410896">
               </div>
               <button type="submit" class="btn btn-primary">Crear Cuenta</button>
             </form>
@@ -139,7 +152,9 @@
     }
 
     document.getElementById('usr-rol').addEventListener('change', (e) => {
-      document.getElementById('wrap-hijo').hidden = e.target.value !== 'padre';
+      const esPadre = e.target.value === 'padre';
+      document.getElementById('wrap-hijo').hidden = !esPadre;
+      document.getElementById('wrap-tg').hidden = !esPadre;
     });
 
     document.getElementById('form-usuario').addEventListener('submit', async (ev) => {
@@ -153,6 +168,7 @@
           password: document.getElementById('usr-pass').value,
           rol,
           alumno_id: rol === 'padre' ? Number(document.getElementById('usr-alumno').value) : null,
+          telegram_chat_id: rol === 'padre' ? document.getElementById('usr-tg').value : null,
         }),
       });
       const d = await r.json();
