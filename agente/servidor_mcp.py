@@ -257,6 +257,46 @@ def consultar_historial_academico(busqueda: str, rol_usuario: str = 'tutor') -> 
 
 
 @mcp.tool()
+def listar_notas_bajas(nota_maxima: float = 11.0, curso: str = '', rol_usuario: str = 'tutor') -> dict:
+    """Lista los estudiantes con notas desaprobatorias o menores a una nota máxima indicada (por defecto 11)
+    mostrando en qué curso y bimestre tienen esa nota baja. Opcionalmente filtra por nombre de curso.
+    Usar cuando pregunten qué alumnos tienen notas o promedios menores a un número, desaprobados o jalados por curso."""
+    t0 = time.perf_counter()
+    print(f"[MCP] listar_notas_bajas(nota_maxima={nota_maxima}, curso={curso}, rol={rol_usuario})")
+    if rol_usuario.lower() == 'padre':
+        registrar_auditoria_mcp('listar_notas_bajas', {'nota_maxima': nota_maxima, 'rol': rol_usuario}, 'Acceso denegado (PROT-10)', t0)
+        return {
+            'autorizado': False,
+            'mensaje': 'Por política de privacidad (PROT-10 / Ley 29733), un padre no puede ver el listado de notas bajas de otros estudiantes.',
+        }
+    curso_limpio = curso.strip()
+    if curso_limpio:
+        filas = consultar(
+            """SELECT a.id AS alumno_id, a.nombre_completo, a.grado, a.seccion,
+                      n.curso, n.bimestre, n.nota,
+                      (SELECT ROUND(AVG(n2.nota)::numeric, 2) FROM notas n2 WHERE n2.alumno_id = a.id) AS promedio_general
+               FROM notas n JOIN alumnos a ON a.id = n.alumno_id
+               WHERE n.nota < %s AND n.curso ILIKE %s
+               ORDER BY n.nota ASC, a.nombre_completo ASC LIMIT 20""",
+            (nota_maxima, f'%{curso_limpio}%'),
+        )
+    else:
+        filas = consultar(
+            """SELECT a.id AS alumno_id, a.nombre_completo, a.grado, a.seccion,
+                      n.curso, n.bimestre, n.nota,
+                      (SELECT ROUND(AVG(n2.nota)::numeric, 2) FROM notas n2 WHERE n2.alumno_id = a.id) AS promedio_general
+               FROM notas n JOIN alumnos a ON a.id = n.alumno_id
+               WHERE n.nota < %s
+               ORDER BY n.nota ASC, a.nombre_completo ASC LIMIT 20""",
+            (nota_maxima,),
+        )
+    registrar_auditoria_mcp('listar_notas_bajas', {'nota_maxima': nota_maxima, 'curso': curso_limpio or 'TODOS'}, f"{len(filas)} registros < {nota_maxima}", t0)
+    if not filas:
+        return {'encontrado': False, 'mensaje': f'No hay estudiantes con notas menores a {nota_maxima}.'}
+    return {'encontrado': True, 'umbral': nota_maxima, 'total': len(filas), 'registros': filas}
+
+
+@mcp.tool()
 def consultar_protocolo_tutoria(tema: str) -> dict:
     """Busca en el reglamento interno, protocolos de tutoría y guías de alerta temprana del MINEDU
     según un tema o palabra clave (ej. '3 faltas', 'alerta roja', 'aislamiento', 'mensaje apoderado').
