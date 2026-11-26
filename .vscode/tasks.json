@@ -22,7 +22,10 @@
       "command": "npx.cmd",
       "args": ["--yes", "n8n"],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${env:USERPROFILE}",
+        "env": {
+          "N8N_DIAGNOSTICS_ENABLED": "false"
+        }
       },
       "isBackground": true,
       "presentation": {

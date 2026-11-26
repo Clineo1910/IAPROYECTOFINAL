@@ -7,7 +7,7 @@ if not exist "%PY%" set "PY=python"
 
 echo Iniciando SIGE-360...
 start "SIGE-360 MCP (:8000)" cmd /k ""%PY%" agente\servidor_mcp.py"
-start "SIGE-360 n8n (:5678)" cmd /k "npx.cmd --yes n8n"
+start "SIGE-360 n8n (:5678)" /D "%USERPROFILE%" cmd /k "set N8N_DIAGNOSTICS_ENABLED=false && npx.cmd --yes n8n"
 start "SIGE-360 Web (:3060)" cmd /k ""%PY%" -m uvicorn app:app --port 3060"
 
 timeout /t 4 /nobreak >nul
