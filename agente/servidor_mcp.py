@@ -2,11 +2,25 @@
 import os
 import json
 import time
+import logging
 from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+
+
+class _SilenciarCierreSSE(logging.Filter):
+    """Oculta el ClosedResourceError cosmético que emite mcp 1.x cuando n8n cierra la sesión (DELETE /mcp 200 OK)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if 'Error in standalone SSE writer' in record.getMessage():
+            if record.exc_info and record.exc_info[0] and record.exc_info[0].__name__ == 'ClosedResourceError':
+                return False
+        return True
+
+
+logging.getLogger('mcp.server.streamable_http').addFilter(_SilenciarCierreSSE())
 
 # Carga variables desde .env en la raíz del proyecto
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
