@@ -77,6 +77,52 @@
     </div>
   </div>
 
+  <!-- MODAL EDITAR ESTUDIANTE Y APODERADO -->
+  <div id="modal-editar-est" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:560px;">
+      <div class="modal-head">
+        <h2 style="margin:0;font-size:1.05rem;">Editar Estudiante y Apoderado</h2>
+        <button id="btn-cerrar-editar" class="btn btn-secondary" type="button">Cerrar</button>
+      </div>
+      <form id="form-editar-est" class="modal-body">
+        <input id="ed-id" type="hidden">
+        <div class="form-grid">
+          <div class="field" style="grid-column:1 / -1;">
+            <label for="ed-nombre">Nombre completo del estudiante</label>
+            <input id="ed-nombre" type="text" required maxlength="95">
+          </div>
+          <div class="field">
+            <label for="ed-grado">Grado</label>
+            <select id="ed-grado">
+              <option value="1ro Secundaria">1ro Secundaria</option>
+              <option value="2do Secundaria">2do Secundaria</option>
+              <option value="3ro Secundaria">3ro Secundaria</option>
+              <option value="4to Secundaria">4to Secundaria</option>
+              <option value="5to Secundaria">5to Secundaria</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ed-seccion">Sección</label>
+            <select id="ed-seccion"><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+          </div>
+          <div class="field" style="grid-column:1 / -1;">
+            <label for="ed-apoderado">Nombre del Apoderado</label>
+            <input id="ed-apoderado" type="text" required maxlength="95">
+          </div>
+          <div class="field">
+            <label for="ed-contacto">Correo / Contacto simulado</label>
+            <input id="ed-contacto" type="text" maxlength="95">
+          </div>
+          <div class="field">
+            <label for="ed-tg">Telegram Chat ID del padre</label>
+            <input id="ed-tg" type="text" placeholder="Ej. 6467323989 (vacío = demo)">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="justify-content:center;">Guardar Cambios</button>
+      </form>
+    </div>
+  </div>
+
   <script src="/layout.js?v=3"></script>
   <script>
     let cache = [];
@@ -140,6 +186,8 @@
         tdAcc.style.display = 'flex'; tdAcc.style.gap = '6px'; tdAcc.style.flexWrap = 'wrap';
         const bFicha = document.createElement('button'); bFicha.type = 'button'; bFicha.className = 'btn btn-secondary btn-xs'; bFicha.textContent = 'Ficha 360°';
         bFicha.addEventListener('click', () => abrirFicha360(a.alumno_id));
+        const bEdit = document.createElement('button'); bEdit.type = 'button'; bEdit.className = 'btn btn-secondary btn-xs'; bEdit.textContent = 'Editar';
+        bEdit.addEventListener('click', () => abrirEditarEst(a));
         const bTg = document.createElement('button'); bTg.type = 'button'; bTg.className = 'btn btn-primary btn-xs'; bTg.textContent = '✈ Alertar';
         bTg.addEventListener('click', async () => {
           const resp = await fetch('/api/alertas/telegram', {
@@ -152,7 +200,7 @@
           const d = await resp.json();
           window.SIGE.mostrarToast('toast-est', d.mensaje || 'Alerta enviada.');
         });
-        tdAcc.append(bFicha, bTg);
+        tdAcc.append(bFicha, bEdit, bTg);
 
         tr.append(tdE, tdG, tdAp, tdP, tdF, tdR, tdAcc);
         tbody.appendChild(tr);
@@ -192,6 +240,46 @@
       addSec('Asistencia RFID', d.asistencia.map((a) => `${a.fecha}: ${a.estado} (${a.origen})`));
       addSec('Convivencia', d.incidencias.map((i) => `[${i.gravedad}] ${i.tipo}: ${i.descripcion}`));
     }
+
+    function abrirEditarEst(a) {
+      document.getElementById('ed-id').value = String(a.alumno_id);
+      document.getElementById('ed-nombre').value = a.nombre_completo;
+      document.getElementById('ed-grado').value = a.grado;
+      document.getElementById('ed-seccion').value = a.seccion;
+      document.getElementById('ed-apoderado').value = a.apoderado_nombre;
+      document.getElementById('ed-contacto').value = a.apoderado_contacto || '';
+      document.getElementById('ed-tg').value = a.telegram_chat_id || '';
+      document.getElementById('modal-editar-est').hidden = false;
+    }
+
+    document.getElementById('btn-cerrar-editar').addEventListener('click', () => { document.getElementById('modal-editar-est').hidden = true; });
+    document.getElementById('modal-editar-est').addEventListener('click', (e) => { if (e.target.id === 'modal-editar-est') e.target.hidden = true; });
+
+    document.getElementById('form-editar-est').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const id = document.getElementById('ed-id').value;
+      const r = await fetch(`/api/alumnos/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre_completo: document.getElementById('ed-nombre').value,
+          grado: document.getElementById('ed-grado').value,
+          seccion: document.getElementById('ed-seccion').value,
+          apoderado_nombre: document.getElementById('ed-apoderado').value,
+          apoderado_contacto: document.getElementById('ed-contacto').value,
+          telegram_chat_id: document.getElementById('ed-tg').value,
+        }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        document.getElementById('modal-editar-est').hidden = true;
+        window.SIGE.mostrarToast('toast-est', d.mensaje);
+        const rd = await fetch('/api/dashboard');
+        cache = (await rd.json()).alumnos || [];
+        render();
+      } else {
+        window.SIGE.mostrarToast('toast-est', d.error || 'Error guardando cambios.');
+      }
+    });
 
     document.getElementById('buscar-est').addEventListener('input', (e) => { filtroTexto = e.target.value; render(); });
     document.getElementById('filtro-grado').addEventListener('change', (e) => { filtroGrado = e.target.value; render(); });

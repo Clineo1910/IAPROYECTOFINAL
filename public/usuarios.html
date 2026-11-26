@@ -74,7 +74,7 @@
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Vínculo / Cargo</th></tr>
+                  <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Vínculo / Cargo</th><th>Telegram ID</th><th>Acción</th></tr>
                 </thead>
                 <tbody id="tabla-usuarios"></tbody>
               </table>
@@ -122,19 +122,65 @@
     </div>
   </div>
 
+  <!-- MODAL EDITAR USUARIO / PADRE -->
+  <div id="modal-editar-usr" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:560px;">
+      <div class="modal-head">
+        <h2 style="margin:0;font-size:1.05rem;">Editar Cuenta de Usuario / Padre</h2>
+        <button id="btn-cerrar-eu" class="btn btn-secondary" type="button">Cerrar</button>
+      </div>
+      <form id="form-editar-usr" class="modal-body">
+        <input id="eu-id" type="hidden">
+        <div class="form-grid">
+          <div class="field">
+            <label for="eu-nombre">Nombre completo</label>
+            <input id="eu-nombre" type="text" required maxlength="95">
+          </div>
+          <div class="field">
+            <label for="eu-email">Correo de acceso</label>
+            <input id="eu-email" type="email" required maxlength="110">
+          </div>
+          <div class="field">
+            <label for="eu-pass">Nueva contraseña (opcional)</label>
+            <input id="eu-pass" type="text" placeholder="Dejar vacío para no cambiar">
+          </div>
+          <div class="field">
+            <label for="eu-rol">Rol</label>
+            <select id="eu-rol">
+              <option value="padre">Padre / Apoderado</option>
+              <option value="tutor">Docente / Tutor</option>
+            </select>
+          </div>
+          <div class="field" id="eu-wrap-hijo">
+            <label for="eu-alumno">Hijo/a vinculado</label>
+            <select id="eu-alumno"></select>
+          </div>
+          <div class="field" id="eu-wrap-tg">
+            <label for="eu-tg">Telegram Chat ID</label>
+            <input id="eu-tg" type="text" placeholder="Ej. 6467323989 (vacío = demo)">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="justify-content:center;">Guardar Cambios</button>
+      </form>
+    </div>
+  </div>
+
   <script src="/layout.js?v=3"></script>
   <script>
     async function cargar() {
       const [rd, ru] = await Promise.all([fetch('/api/dashboard'), fetch('/api/usuarios')]);
       const alumnos = ((await rd.json()).alumnos || []).sort((a, b) => a.alumno_id - b.alumno_id);
       const sel = document.getElementById('usr-alumno');
+      const selEu = document.getElementById('eu-alumno');
       const prev = sel.value;
       sel.textContent = '';
+      selEu.textContent = '';
       alumnos.forEach((a) => {
         const opt = document.createElement('option');
         opt.value = String(a.alumno_id);
         opt.textContent = `${a.nombre_completo} (${a.grado} ${a.seccion})`;
         sel.appendChild(opt);
+        selEu.appendChild(opt.cloneNode(true));
       });
       if (prev) sel.value = prev;
 
@@ -147,9 +193,64 @@
         const b = document.createElement('span'); b.className = 'badge ' + (u.rol === 'tutor' ? 'badge-GENERAL' : 'badge-VERDE'); b.textContent = u.rol === 'tutor' ? 'Docente / Tutor' : 'Padre / Apoderado';
         tdR.appendChild(b); tr.appendChild(tdR);
         const tdC = document.createElement('td'); tdC.textContent = u.cargo; tr.appendChild(tdC);
+        const tdTg = document.createElement('td');
+        tdTg.textContent = u.rol === 'padre' ? (u.telegram_chat_id || 'Demo (.env)') : '—';
+        tdTg.style.fontSize = '0.8rem';
+        tr.appendChild(tdTg);
+        const tdAcc = document.createElement('td');
+        const bEdit = document.createElement('button');
+        bEdit.type = 'button'; bEdit.className = 'btn btn-secondary btn-xs'; bEdit.textContent = 'Editar';
+        bEdit.addEventListener('click', () => abrirEditarUsr(u));
+        tdAcc.appendChild(bEdit);
+        tr.appendChild(tdAcc);
         tbody.appendChild(tr);
       });
     }
+
+    function abrirEditarUsr(u) {
+      document.getElementById('eu-id').value = String(u.id);
+      document.getElementById('eu-nombre').value = u.nombre;
+      document.getElementById('eu-email').value = u.email;
+      document.getElementById('eu-pass').value = '';
+      document.getElementById('eu-rol').value = u.rol;
+      const esPadre = u.rol === 'padre';
+      document.getElementById('eu-wrap-hijo').hidden = !esPadre;
+      document.getElementById('eu-wrap-tg').hidden = !esPadre;
+      if (u.alumno_id) document.getElementById('eu-alumno').value = String(u.alumno_id);
+      document.getElementById('eu-tg').value = u.telegram_chat_id || '';
+      document.getElementById('modal-editar-usr').hidden = false;
+    }
+
+    document.getElementById('eu-rol').addEventListener('change', (e) => {
+      const esPadre = e.target.value === 'padre';
+      document.getElementById('eu-wrap-hijo').hidden = !esPadre;
+      document.getElementById('eu-wrap-tg').hidden = !esPadre;
+    });
+    document.getElementById('btn-cerrar-eu').addEventListener('click', () => { document.getElementById('modal-editar-usr').hidden = true; });
+    document.getElementById('modal-editar-usr').addEventListener('click', (e) => { if (e.target.id === 'modal-editar-usr') e.target.hidden = true; });
+
+    document.getElementById('form-editar-usr').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const id = document.getElementById('eu-id').value;
+      const rol = document.getElementById('eu-rol').value;
+      const r = await fetch(`/api/usuarios/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: document.getElementById('eu-nombre').value,
+          email: document.getElementById('eu-email').value,
+          password: document.getElementById('eu-pass').value || null,
+          rol,
+          alumno_id: rol === 'padre' ? Number(document.getElementById('eu-alumno').value) : null,
+          telegram_chat_id: rol === 'padre' ? document.getElementById('eu-tg').value : null,
+        }),
+      });
+      const d = await r.json();
+      window.SIGE.mostrarToast('toast-usuario', d.mensaje || d.error || 'Actualizado.');
+      if (r.ok) {
+        document.getElementById('modal-editar-usr').hidden = true;
+        await cargar();
+      }
+    });
 
     document.getElementById('usr-rol').addEventListener('change', (e) => {
       const esPadre = e.target.value === 'padre';

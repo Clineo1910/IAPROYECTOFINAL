@@ -253,6 +253,15 @@ class AlumnoEntrada(BaseModel):
     apoderado_nombre: str
 
 
+class AlumnoEditarEntrada(BaseModel):
+    nombre_completo: str
+    grado: str
+    seccion: str
+    apoderado_nombre: str
+    apoderado_contacto: str = ''
+    telegram_chat_id: str | None = None
+
+
 class IntervencionEstadoEntrada(BaseModel):
     estado: str
 
@@ -262,6 +271,15 @@ class UsuarioNuevoEntrada(BaseModel):
     password: str
     rol: str = 'padre'
     nombre: str
+    alumno_id: int | None = None
+    telegram_chat_id: str | None = None
+
+
+class UsuarioEditarEntrada(BaseModel):
+    email: str
+    nombre: str
+    rol: str = 'padre'
+    password: str | None = None
     alumno_id: int | None = None
     telegram_chat_id: str | None = None
 
@@ -674,6 +692,40 @@ def api_crear_alumno(entrada: AlumnoEntrada, request: Request):
         return JSONResponse({'error': 'No se pudo registrar el estudiante'}, status_code=500)
 
 
+@app.put('/api/alumnos/{alumno_id}')
+def api_editar_alumno(alumno_id: int, entrada: AlumnoEditarEntrada, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    nombre = entrada.nombre_completo.strip()
+    if len(nombre) < 4:
+        return JSONResponse({'error': 'El nombre del estudiante es obligatorio.'}, status_code=400)
+    tg = (entrada.telegram_chat_id or '').strip() or None
+    try:
+        with obtener_conexion() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE alumnos
+                       SET nombre_completo = %s, grado = %s, seccion = %s,
+                           apoderado_nombre = %s, apoderado_contacto = %s, telegram_chat_id = %s
+                       WHERE id = %s""",
+                    (
+                        nombre,
+                        entrada.grado.strip(),
+                        entrada.seccion.strip()[:1].upper(),
+                        entrada.apoderado_nombre.strip() or 'Apoderado (Demo)',
+                        entrada.apoderado_contacto.strip(),
+                        tg,
+                        alumno_id,
+                    ),
+                )
+            conn.commit()
+        return {'ok': True, 'mensaje': f'Datos de {nombre} actualizados en PostgreSQL.'}
+    except Exception as exc:
+        print('[APP] Error editando alumno:', exc)
+        return JSONResponse({'error': 'No se pudo actualizar el estudiante'}, status_code=500)
+
+
 @app.patch('/api/intervenciones/{intervencion_id}')
 def api_actualizar_intervencion(intervencion_id: int, entrada: IntervencionEstadoEntrada, request: Request):
     bloqueo = exigir_tutor(request)
@@ -785,9 +837,10 @@ def api_listar_usuarios(request: Request):
     if bloqueo:
         return bloqueo
     filas = consultar(
-        """SELECT u.id, u.email, u.rol, u.nombre, u.cargo, u.alumno_id, a.nombre_completo AS alumno_nombre
+        """SELECT u.id, u.email, u.rol, u.nombre, u.cargo, u.alumno_id,
+                  a.nombre_completo AS alumno_nombre, a.telegram_chat_id
            FROM usuarios u LEFT JOIN alumnos a ON a.id = u.alumno_id
-           ORDER BY u.id DESC LIMIT 50"""
+           ORDER BY u.id DESC LIMIT 80"""
     )
     return {'usuarios': filas}
 
@@ -830,6 +883,59 @@ def api_crear_usuario(entrada: UsuarioNuevoEntrada, request: Request):
     except Exception as exc:
         print('[APP] Error creando usuario:', exc)
         return JSONResponse({'error': 'Ese correo ya está registrado o hubo un error al guardar.'}, status_code=400)
+
+
+@app.put('/api/usuarios/{usuario_id}')
+def api_editar_usuario(usuario_id: int, entrada: UsuarioEditarEntrada, request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
+    email = entrada.email.strip().lower()
+    rol = entrada.rol.strip().lower()
+    if '@' not in email or rol not in ('padre', 'tutor'):
+        return JSONResponse({'error': 'Correo y rol válidos son obligatorios.'}, status_code=400)
+    if rol == 'padre' and not entrada.alumno_id:
+        return JSONResponse({'error': 'Una cuenta de padre debe estar vinculada a un estudiante.'}, status_code=400)
+
+    cargo = 'Docente / Tutor SIGE-360'
+    if rol == 'padre':
+        al = consultar("SELECT nombre_completo, grado, seccion FROM alumnos WHERE id = %s LIMIT 1", (entrada.alumno_id,))
+        if not al:
+            return JSONResponse({'error': 'Estudiante no encontrado.'}, status_code=404)
+        cargo = f"Apoderado de {al[0]['nombre_completo']} ({al[0]['grado']} {al[0]['seccion']})"
+
+    nueva_pwd = (entrada.password or '').strip()
+    if nueva_pwd and len(nueva_pwd) < 4:
+        return JSONResponse({'error': 'La nueva contraseña debe tener al menos 4 caracteres.'}, status_code=400)
+
+    try:
+        with obtener_conexion() as conn:
+            with conn.cursor() as cur:
+                if nueva_pwd:
+                    cur.execute(
+                        """UPDATE usuarios
+                           SET email = %s, password = %s, rol = %s, nombre = %s, cargo = %s, alumno_id = %s
+                           WHERE id = %s""",
+                        (email, hashear_password(nueva_pwd), rol, entrada.nombre.strip(), cargo, entrada.alumno_id if rol == 'padre' else None, usuario_id),
+                    )
+                else:
+                    cur.execute(
+                        """UPDATE usuarios
+                           SET email = %s, rol = %s, nombre = %s, cargo = %s, alumno_id = %s
+                           WHERE id = %s""",
+                        (email, rol, entrada.nombre.strip(), cargo, entrada.alumno_id if rol == 'padre' else None, usuario_id),
+                    )
+                if rol == 'padre' and entrada.alumno_id and entrada.telegram_chat_id is not None:
+                    tg_limpio = entrada.telegram_chat_id.strip() or None
+                    cur.execute(
+                        "UPDATE alumnos SET telegram_chat_id = %s WHERE id = %s",
+                        (tg_limpio, entrada.alumno_id),
+                    )
+            conn.commit()
+        return {'ok': True, 'mensaje': f'Cuenta {email} actualizada correctamente en PostgreSQL.'}
+    except Exception as exc:
+        print('[APP] Error editando usuario:', exc)
+        return JSONResponse({'error': 'No se pudo actualizar la cuenta (verifica que el correo no esté duplicado).'}, status_code=400)
 
 
 # ==================== ALERTAS TELEGRAM (API EXTERNA GRATIS - PASO 5) ====================
