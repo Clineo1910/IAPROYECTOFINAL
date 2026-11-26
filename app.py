@@ -6,6 +6,7 @@ import hmac
 import hashlib
 import secrets
 import time
+import html
 import threading
 import unicodedata
 from datetime import datetime, timedelta
@@ -1152,15 +1153,30 @@ def _construir_resumen_asistencia_telegram(alumno_id: int) -> str:
     return '\n'.join(lineas)
 
 
-def _enviar_tg(token: str, chat_id, texto: str, reply_markup=None):
+def _formatear_html_telegram(texto: str) -> str:
+    """Convierte texto limpio (o con **negritas**) a HTML seguro para Telegram."""
+    seguro = html.escape(texto.strip())
+    seguro = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', seguro)
+    seguro = re.sub(r'^\s*[-*]\s+', '• ', seguro, flags=re.MULTILINE)
+    return seguro
+
+
+def _enviar_tg(token: str, chat_id, texto: str, reply_markup=None, es_html: bool = False):
     payload = {'chat_id': chat_id, 'text': texto[:4000]}
+    if es_html:
+        payload['parse_mode'] = 'HTML'
     if reply_markup:
         payload['reply_markup'] = reply_markup
-    requests.post(
+    r = requests.post(
         f'https://api.telegram.org/bot{token}/sendMessage',
         json=payload,
         timeout=10,
     )
+    if not r.ok and es_html:
+        # Fallback a texto plano si Telegram rechaza alguna etiqueta
+        payload.pop('parse_mode', None)
+        payload['text'] = re.sub(r'<[^>]+>', '', texto)[:4000]
+        requests.post(f'https://api.telegram.org/bot{token}/sendMessage', json=payload, timeout=10)
 
 
 def _consultar_agente_telegram(token: str, chat_id, al: dict, consulta_usuario: str):
@@ -1176,7 +1192,11 @@ def _consultar_agente_telegram(token: str, chat_id, al: dict, consulta_usuario: 
 
     mensaje_agente = (
         f"(Apoderado autenticado vía Telegram, solo autorizado para su hijo "
-        f"{al['nombre_completo']} ID {al['id']}) {consulta_usuario}"
+        f"{al['nombre_completo']} ID {al['id']}. "
+        f"Formato obligatorio para Telegram móvil: responde de forma muy ordenada en secciones cortas con saltos de línea, "
+        f"viñetas '•' y emojis sobrios como 📊, 📚, 📅, 💡. NO escribas un solo párrafo largo. "
+        f"Cierra con una línea corta indicando que eres asistente de IA - Ley N.° 31814.) "
+        f"{consulta_usuario}"
     )
     print(f"[TELEGRAM -> N8N/MCP] chat_id={chat_id} alumno_id={al['id']} consulta={consulta_usuario[:80]!r}")
     try:
@@ -1195,11 +1215,18 @@ def _consultar_agente_telegram(token: str, chat_id, al: dict, consulta_usuario: 
         resp_ia = ''
 
     if resp_ia:
+        encabezado = (
+            f"🤖 <b>SIGE-Bot · SIGE-360</b>\n"
+            f"🎓 <i>{html.escape(al['nombre_completo'])} · {html.escape(al['grado'])} {html.escape(al['seccion'])}</i>\n"
+            f"────────────────────\n\n"
+        )
+        cuerpo = _formatear_html_telegram(resp_ia)
         _enviar_tg(
             token,
             chat_id,
-            f"🤖 SIGE-Bot (vía n8n + MCP):\n\n{resp_ia}",
+            f"{encabezado}{cuerpo}",
             reply_markup=_botones_alumno_telegram(al['id']),
+            es_html=True,
         )
     else:
         _enviar_tg(
@@ -1270,14 +1297,22 @@ def _bucle_vinculacion_telegram():
                             token,
                             chat_id,
                             al,
-                            f"Consulta el historial académico y las notas por curso de mi hijo {al['nombre_completo']} (ID {al['id']}) y dame un resumen claro con recomendaciones de apoyo en casa.",
+                            f"Consulta el historial académico y las notas por curso de mi hijo {al['nombre_completo']} (ID {al['id']}). "
+                            f"Organiza la respuesta exactamente en 3 secciones con saltos de línea: "
+                            f"1) 📊 Resumen general (promedio y situación), "
+                            f"2) 📚 Notas por curso (una viñeta '•' por cada curso con su nota en línea aparte), "
+                            f"3) 💡 Recomendaciones para casa (máximo 3 viñetas cortas).",
                         )
                     elif accion == 'asis':
                         _consultar_agente_telegram(
                             token,
                             chat_id,
                             al,
-                            f"Consulta el historial de asistencia, tardanzas y faltas recientes de mi hijo {al['nombre_completo']} (ID {al['id']}) y dime si requiere seguimiento.",
+                            f"Consulta el historial de asistencia, tardanzas y faltas recientes de mi hijo {al['nombre_completo']} (ID {al['id']}). "
+                            f"Organiza la respuesta exactamente en 3 secciones con saltos de línea: "
+                            f"1) 📅 Resumen de asistencia (conteo de faltas y tardanzas), "
+                            f"2) 🕒 Últimos registros RFID (una viñeta '•' por cada fecha en línea aparte), "
+                            f"3) 💡 Acción recomendada para el apoderado.",
                         )
                     elif accion == 'ack':
                         try:
