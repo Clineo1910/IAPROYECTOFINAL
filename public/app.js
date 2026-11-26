@@ -111,6 +111,7 @@ function poblarSelectores(alumnos) {
       opt.textContent = `${a.nombre_completo} (${a.codigo_rfid})`;
       selRfid.appendChild(opt);
     });
+    window.SIGE.hacerBuscable('rfid-alumno', 'Filtrar alumno RFID...');
   }
   const selBusc = document.getElementById('buscador-rapido');
   if (selBusc && selBusc.options.length <= 1) {
@@ -120,6 +121,7 @@ function poblarSelectores(alumnos) {
       opt.textContent = `${a.nombre_completo} (${a.grado} ${a.seccion})`;
       selBusc.appendChild(opt);
     });
+    window.SIGE.hacerBuscable('buscador-rapido', 'Buscar Ficha 360°...');
   }
 }
 

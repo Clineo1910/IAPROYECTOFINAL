@@ -74,7 +74,7 @@
     </div>
   </div>
 
-  <script src="/layout.js?v=3"></script>
+  <script src="/layout.js?v=4"></script>
   <script>
     async function cargarHistorialEstudiante() {
       const sel = document.getElementById('inc-alumno');
@@ -116,6 +116,7 @@
           opt.textContent = `${a.nombre_completo} (${a.grado} ${a.seccion})`;
           sel.appendChild(opt);
         });
+        window.SIGE.hacerBuscable('inc-alumno', 'Filtrar estudiante...');
       }
       await cargarHistorialEstudiante();
     }

@@ -26,6 +26,45 @@ window.SIGE = {
     setTimeout(() => { el.hidden = true; }, 4500);
   },
 
+  hacerBuscable(selectId, placeholder = 'Buscar estudiante...') {
+    const sel = document.getElementById(selectId);
+    if (!sel || sel.dataset.buscable === '1') return;
+    sel.dataset.buscable = '1';
+
+    const todas = [...sel.options].map((o) => ({ value: o.value, text: o.textContent }));
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    const inp = document.createElement('input');
+    inp.type = 'search';
+    inp.placeholder = placeholder;
+    inp.className = 'search-input';
+    inp.style.width = '100%';
+    inp.style.marginBottom = '5px';
+    inp.style.padding = '6px 10px';
+    inp.style.fontSize = '0.78rem';
+
+    sel.parentNode.insertBefore(inp, sel);
+
+    inp.addEventListener('input', () => {
+      const q = norm(inp.value.trim());
+      const prev = sel.value;
+      sel.textContent = '';
+      const filtradas = todas.filter((o) => !q || norm(o.text).includes(q));
+      filtradas.forEach((o) => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        sel.appendChild(opt);
+      });
+      if (filtradas.some((o) => o.value === prev)) {
+        sel.value = prev;
+      } else if (filtradas.length > 0) {
+        sel.value = filtradas[0].value;
+        sel.dispatchEvent(new Event('change'));
+      }
+    });
+  },
+
   async enviarTelegram(mensaje, alumnoId = 3) {
     const r = await fetch('/api/alertas/telegram', {
       method: 'POST',

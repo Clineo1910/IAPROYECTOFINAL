@@ -66,7 +66,7 @@
     </div>
   </div>
 
-  <script src="/layout.js?v=3"></script>
+  <script src="/layout.js?v=4"></script>
   <script>
     async function cargarHistorialBiblioteca() {
       const sel = document.getElementById('bib-alumno');
@@ -109,6 +109,7 @@
           opt.textContent = `${a.nombre_completo} (${a.grado} ${a.seccion})`;
           sel.appendChild(opt);
         });
+        window.SIGE.hacerBuscable('bib-alumno', 'Filtrar estudiante...');
       }
       await cargarHistorialBiblioteca();
     }
