@@ -23,6 +23,18 @@
 
   <main class="workspace" style="max-width:1360px;margin:0 auto;">
     <section class="content-col">
+      <!-- Membrete oficial solo visible al exportar/imprimir PDF -->
+      <div class="print-only print-letterhead">
+        <div>
+          <h1>SIGE-360 · Boleta Oficial de Calificaciones (Secundaria)</h1>
+          <p>Sistema de Inteligencia Escolar Predictiva · Documento informativo para el apoderado (Ley N.° 29733)</p>
+        </div>
+        <div style="text-align:right;font-size:0.75rem;color:#475569;">
+          <div>Año Escolar 2026</div>
+          <div id="print-fecha-boleta"></div>
+        </div>
+      </div>
+
       <!-- Tarjeta Resumen del Hijo -->
       <div class="card" style="background:linear-gradient(135deg,#eff6ff 0%,#ffffff 65%);border-color:#bfdbfe;">
         <div class="card-head" style="margin-bottom:10px;">
@@ -59,6 +71,7 @@
             <h2>Boleta de Calificaciones (6 Cursos · 4 Bimestres)</h2>
             <p>Resumen matricial actualizado en tiempo real desde la base de datos escolar</p>
           </div>
+          <button id="btn-imprimir-boleta" type="button" class="btn btn-primary no-print">🖨️ Exportar Boleta PDF</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -111,6 +124,12 @@
           </div>
           <div id="lista-avisos-tutor" style="display:flex;flex-direction:column;gap:10px;"></div>
         </div>
+      </div>
+
+      <!-- Firmas solo visibles al imprimir/exportar PDF -->
+      <div class="print-only print-signatures">
+        <div class="print-sig-box">Firma del Tutor Académico · SIGE-360</div>
+        <div class="print-sig-box">Firma del Padre / Apoderado</div>
       </div>
     </section>
 

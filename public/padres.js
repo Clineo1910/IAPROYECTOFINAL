@@ -245,4 +245,13 @@ document.getElementById('btn-logout-padre').addEventListener('click', async () =
   window.location.href = '/login.html';
 });
 
+const btnImp = document.getElementById('btn-imprimir-boleta');
+if (btnImp) {
+  btnImp.addEventListener('click', () => {
+    const fEl = document.getElementById('print-fecha-boleta');
+    if (fEl) fEl.textContent = `Emitido: ${new Date().toLocaleDateString('es-PE')}`;
+    window.print();
+  });
+}
+
 cargarPortalPadre();

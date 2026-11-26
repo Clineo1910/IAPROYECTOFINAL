@@ -66,14 +66,28 @@
   <!-- MODAL FICHA 360° -->
   <div id="modal-ficha" class="modal-backdrop" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-nombre">
+      <div class="print-only print-letterhead">
+        <div>
+          <h1>SIGE-360 · Ficha Integral 360° del Estudiante</h1>
+          <p>Reporte Predictivo de Riesgo Escolar · Uso exclusivo docente/tutoría (Ley N.° 29733)</p>
+        </div>
+        <div style="text-align:right;font-size:0.75rem;color:#475569;">Año Escolar 2026</div>
+      </div>
       <div class="modal-head">
         <div>
           <h2 id="modal-nombre" style="margin:0;font-size:1.05rem;">Ficha 360°</h2>
           <small id="modal-sub" style="color:#64748b;"></small>
         </div>
-        <button id="btn-cerrar-modal" class="btn btn-secondary" type="button">Cerrar</button>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn btn-primary no-print" onclick="document.body.classList.add('printing-ficha');window.print();setTimeout(()=>document.body.classList.remove('printing-ficha'),300);">🖨️ Exportar PDF</button>
+          <button id="btn-cerrar-modal" class="btn btn-secondary no-print" type="button">Cerrar</button>
+        </div>
       </div>
       <div id="modal-body" class="modal-body"></div>
+      <div class="print-only print-signatures">
+        <div class="print-sig-box">Firma del Docente / Tutor</div>
+        <div class="print-sig-box">V°B° Coordinación de Tutoría (TOE)</div>
+      </div>
     </div>
   </div>
 

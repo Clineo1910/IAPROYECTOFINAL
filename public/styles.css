@@ -765,3 +765,76 @@ tbody tr:hover { background: #f8fafc; }
   box-shadow: var(--shadow-md);
   border-color: #94a3b8;
 }
+
+/* ==================== IMPRESIÓN / EXPORTACIÓN PDF ==================== */
+.print-only { display: none; }
+.print-letterhead {
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 10px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+.print-letterhead h1 { margin: 0; font-size: 1.15rem; color: #0f172a; }
+.print-letterhead p { margin: 2px 0 0; font-size: 0.78rem; color: #475569; }
+.print-signatures {
+  margin-top: 34px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  padding-top: 12px;
+}
+.print-sig-box {
+  border-top: 1px solid #334155;
+  padding-top: 6px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: #334155;
+}
+
+@media print {
+  @page { margin: 14mm; size: A4 portrait; }
+  body { background: #fff !important; color: #0f172a !important; }
+  .sidebar, .topbar, .chat-panel, .no-print, .btn, button, .chat-chips, .toast-ok {
+    display: none !important;
+  }
+  .print-only { display: block !important; }
+  .print-only.print-letterhead { display: flex !important; }
+  .print-only.print-signatures { display: grid !important; }
+  .workspace, .content-col {
+    display: block !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    break-inside: avoid;
+    margin-bottom: 12px !important;
+  }
+  .dual-cards { display: block !important; }
+  body.printing-ficha .app-shell { display: none !important; }
+  body.printing-ficha #modal-ficha {
+    display: block !important;
+    position: static !important;
+    background: #fff !important;
+    padding: 0 !important;
+    backdrop-filter: none !important;
+  }
+  body.printing-ficha #modal-ficha .modal-card {
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  body.printing-ficha #modal-ficha .modal-head {
+    position: static !important;
+    padding: 0 0 12px !important;
+  }
+  body.printing-ficha #modal-ficha .modal-body {
+    padding: 12px 0 0 !important;
+  }
+}
