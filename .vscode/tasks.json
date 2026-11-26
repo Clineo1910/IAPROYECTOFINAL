@@ -1,0 +1,66 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "SIGE-360: 1. Servidor MCP (Python :8000)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "$py = \"$env:LOCALAPPDATA\\Programs\\Python\\Python312\\python.exe\"; if (-not (Test-Path $py)) { $py = 'python' }; & $py agente/servidor_mcp.py"
+      ],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "sige360"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "SIGE-360: 2. n8n Local (:5678)",
+      "type": "shell",
+      "command": "npx",
+      "args": ["--yes", "n8n"],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "sige360"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "SIGE-360: 3. App Web FastAPI (:3060)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "$py = \"$env:LOCALAPPDATA\\Programs\\Python\\Python312\\python.exe\"; if (-not (Test-Path $py)) { $py = 'python' }; & $py -m uvicorn app:app --port 3060"
+      ],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "sige360"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "SIGE-360: Iniciar todos los servicios",
+      "dependsOn": [
+        "SIGE-360: 1. Servidor MCP (Python :8000)",
+        "SIGE-360: 2. n8n Local (:5678)",
+        "SIGE-360: 3. App Web FastAPI (:3060)"
+      ],
+      "dependsOrder": "parallel",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}
