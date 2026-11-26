@@ -16,13 +16,13 @@
           <div class="card">
             <div class="card-head">
               <div>
-                <h2>Libreta Ponderada por Grado y Curso</h2>
-                <p>Bimestres 1, 2 y 3 poblados en PostgreSQL. Al escribir en N1–N4, Ex. Parcial o Ex. Final, la Nota Final se recalcula en vivo.</p>
+                <h2>Registro Auxiliar de Evaluación Bimestral (Secundaria)</h2>
+                <p>Bimestres 1 al 4 poblados en PostgreSQL. Al editar prácticas, tareas o evaluaciones, la Nota Bimestral y la escala MINEDU (AD/A/B/C) se recalculan en vivo.</p>
               </div>
             </div>
             <div class="form-grid" style="margin-bottom:14px;">
               <div class="field">
-                <label for="acta-grado">Grado Académico</label>
+                <label for="acta-grado">Grado (Secundaria)</label>
                 <select id="acta-grado">
                   <option value="1ro Secundaria">1ro Secundaria</option>
                   <option value="2do Secundaria">2do Secundaria</option>
@@ -32,7 +32,7 @@
                 </select>
               </div>
               <div class="field">
-                <label for="acta-curso">Curso</label>
+                <label for="acta-curso">Área Curricular</label>
                 <select id="acta-curso">
                   <option value="Matemática">Matemática</option>
                   <option value="Comunicación">Comunicación</option>
@@ -51,7 +51,7 @@
                   <option value="4">Bimestre 4 (Completo)</option>
                 </select>
               </div>
-              <button id="btn-guardar-acta" type="button" class="btn btn-primary">Guardar Acta del Curso</button>
+              <button id="btn-guardar-acta" type="button" class="btn btn-primary">Guardar Registro Bimestral</button>
             </div>
 
             <div class="table-wrap">
@@ -60,14 +60,15 @@
                   <tr>
                     <th>Estudiante</th>
                     <th>Sec.</th>
-                    <th>N1</th>
-                    <th>N2</th>
-                    <th>N3</th>
-                    <th>N4</th>
-                    <th>Prom. Perm.<br><small>40%</small></th>
-                    <th>Ex. Parcial<br><small>30%</small></th>
-                    <th>Ex. Final<br><small>30%</small></th>
-                    <th>Nota Final</th>
+                    <th>Práct. 1</th>
+                    <th>Práct. 2</th>
+                    <th>Tareas /<br><small>Cuaderno</small></th>
+                    <th>Particip.</th>
+                    <th>Prom. Proceso<br><small>50%</small></th>
+                    <th>Eval. Mensual<br><small>20%</small></th>
+                    <th>Eval. Bimestral<br><small>30%</small></th>
+                    <th>Nota<br><small>Bimestral</small></th>
+                    <th>Nivel<br><small>MINEDU</small></th>
                   </tr>
                 </thead>
                 <tbody id="tabla-acta-grado"></tbody>
@@ -75,7 +76,7 @@
             </div>
             <div class="acta-footer">
               <span id="acta-promedio-aula">Promedio del aula: --</span>
-              <span style="color:#64748b;font-weight:500;font-size:0.76rem;">Fórmula: Prom. Perm. (40%) + Ex. Parcial (30%) + Ex. Final (30%)</span>
+              <span style="color:#64748b;font-weight:500;font-size:0.76rem;">Fórmula Secundaria: Proceso (50%) + Eval. Mensual (20%) + Eval. Bimestral (30%) · AD (18–20), A (14–17), B (11–13), C (0–10)</span>
             </div>
             <div id="toast-nota" class="toast-ok" hidden></div>
           </div>
@@ -90,21 +91,36 @@
     let alumnosCache = [];
     let notasCache = [];
 
+    function nivelMinedu(nota) {
+      if (nota >= 18) return { letra: 'AD', clase: 'badge-VERDE', titulo: 'Logro destacado' };
+      if (nota >= 14) return { letra: 'A', clase: 'badge-VERDE', titulo: 'Logro esperado' };
+      if (nota >= 11) return { letra: 'B', clase: 'badge-AMBAR', titulo: 'En proceso' };
+      return { letra: 'C', clase: 'badge-ROJO', titulo: 'En inicio' };
+    }
+
     function recalcularFilaActa(tr) {
       const num = (cls) => {
         const v = tr.querySelector('.' + cls)?.value;
         return v === '' || v === undefined ? 0 : Math.min(20, Math.max(0, Number(v)));
       };
       const tiene = ['g-n1','g-n2','g-n3','g-n4','g-parcial','g-final'].some((c) => tr.querySelector('.' + c)?.value !== '');
-      const promPerm = (num('g-n1') + num('g-n2') + num('g-n3') + num('g-n4')) / 4;
-      const notaFinal = Math.round(promPerm * 0.4 + num('g-parcial') * 0.3 + num('g-final') * 0.3);
-      tr.querySelector('.prom-cell').textContent = tiene ? promPerm.toFixed(2) : '-';
+      const promProceso = (num('g-n1') + num('g-n2') + num('g-n3') + num('g-n4')) / 4;
+      const notaFinal = Math.round(promProceso * 0.5 + num('g-parcial') * 0.2 + num('g-final') * 0.3);
+      tr.querySelector('.prom-cell').textContent = tiene ? promProceso.toFixed(2) : '-';
       const b = tr.querySelector('.nota-final-badge');
+      const m = tr.querySelector('.minedu-badge');
       if (!tiene) {
         b.className = 'badge nota-final-badge'; b.textContent = '--'; tr.dataset.notaFinal = '';
+        if (m) { m.className = 'badge minedu-badge'; m.textContent = '--'; }
       } else {
         b.className = 'badge nota-final-badge ' + (notaFinal < 11 ? 'badge-ROJO' : (notaFinal < 14 ? 'badge-AMBAR' : 'badge-VERDE'));
         b.textContent = String(notaFinal); tr.dataset.notaFinal = String(notaFinal);
+        if (m) {
+          const niv = nivelMinedu(notaFinal);
+          m.className = 'badge minedu-badge ' + niv.clase;
+          m.textContent = niv.letra;
+          m.title = niv.titulo;
+        }
       }
       const vals = [...document.querySelectorAll('#tabla-acta-grado tr[data-alumno-id]')].map((r) => r.dataset.notaFinal).filter(Boolean).map(Number);
       document.getElementById('acta-promedio-aula').textContent = vals.length
@@ -164,6 +180,8 @@
         tr.append(mk('g-parcial', vals.parcial), mk('g-final', vals.final, 'Pend.'));
         const tdF = document.createElement('td');
         const b = document.createElement('span'); b.className = 'badge nota-final-badge'; tdF.appendChild(b); tr.appendChild(tdF);
+        const tdM = document.createElement('td');
+        const bm = document.createElement('span'); bm.className = 'badge minedu-badge'; tdM.appendChild(bm); tr.appendChild(tdM);
 
         tbody.appendChild(tr);
         recalcularFilaActa(tr);
