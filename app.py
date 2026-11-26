@@ -535,16 +535,28 @@ def api_rfid_scan(entrada: RfidScanEntrada, request: Request):
 
 
 @app.get('/api/notas')
-def api_listar_notas(request: Request):
+def api_listar_notas(request: Request, grado: str = '', curso: str = ''):
     bloqueo = exigir_tutor(request)
     if bloqueo:
         return bloqueo
     try:
+        conds = []
+        params = []
+        if grado.strip():
+            conds.append("a.grado = %s")
+            params.append(grado.strip())
+        if curso.strip():
+            conds.append("n.curso = %s")
+            params.append(curso.strip())
+        where_sql = f"WHERE {' AND '.join(conds)}" if conds else ""
         filas = consultar(
-            """SELECT n.id, n.alumno_id, a.nombre_completo, a.grado, a.seccion,
-                      n.curso, n.bimestre, n.nota, n.fecha_registro
-               FROM notas n JOIN alumnos a ON a.id = n.alumno_id
-               ORDER BY n.id DESC LIMIT 160"""
+            f"""SELECT n.id, n.alumno_id, a.nombre_completo, a.grado, a.seccion,
+                       n.curso, n.bimestre, n.nota, n.fecha_registro
+                FROM notas n JOIN alumnos a ON a.id = n.alumno_id
+                {where_sql}
+                ORDER BY n.bimestre DESC, n.fecha_registro DESC, n.id DESC
+                LIMIT 5000""",
+            tuple(params),
         )
         return {'notas': filas}
     except Exception as exc:
