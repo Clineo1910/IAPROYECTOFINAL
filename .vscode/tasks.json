@@ -5,15 +5,14 @@
       "label": "SIGE-360: 1. Servidor MCP (Python :8000)",
       "type": "process",
       "command": "${env:LOCALAPPDATA}\\Programs\\Python\\Python312\\python.exe",
-      "args": ["agente/servidor_mcp.py"],
+      "args": ["-u", "agente/servidor_mcp.py"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
       "isBackground": true,
       "presentation": {
         "reveal": "always",
-        "panel": "dedicated",
-        "group": "sige360"
+        "panel": "dedicated"
       },
       "problemMatcher": []
     },
@@ -28,8 +27,7 @@
       "isBackground": true,
       "presentation": {
         "reveal": "always",
-        "panel": "dedicated",
-        "group": "sige360"
+        "panel": "dedicated"
       },
       "problemMatcher": []
     },
@@ -37,15 +35,14 @@
       "label": "SIGE-360: 3. App Web FastAPI (:3060)",
       "type": "process",
       "command": "${env:LOCALAPPDATA}\\Programs\\Python\\Python312\\python.exe",
-      "args": ["-m", "uvicorn", "app:app", "--port", "3060"],
+      "args": ["-u", "-m", "uvicorn", "app:app", "--port", "3060"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
       "isBackground": true,
       "presentation": {
         "reveal": "always",
-        "panel": "dedicated",
-        "group": "sige360"
+        "panel": "dedicated"
       },
       "problemMatcher": []
     },
