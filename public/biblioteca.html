@@ -42,6 +42,24 @@
             </form>
             <div id="toast-bib" class="toast-ok" hidden></div>
           </div>
+
+          <!-- Registro de Biblioteca SOLO del estudiante seleccionado -->
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2 id="tit-bib-est">Registro de Biblioteca del Estudiante</h2>
+                <p>Cambia el estudiante arriba para ver sus préstamos y devoluciones</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Fecha</th><th>Libro</th><th>Estado</th></tr>
+                </thead>
+                <tbody id="tabla-bib-est"></tbody>
+              </table>
+            </div>
+          </div>
         </section>
         <aside id="sige-chat-panel" class="chat-panel"></aside>
       </main>
@@ -50,6 +68,36 @@
 
   <script src="/layout.js?v=3"></script>
   <script>
+    async function cargarHistorialBiblioteca() {
+      const sel = document.getElementById('bib-alumno');
+      const aid = sel.value;
+      if (!aid) return;
+      const nombre = sel.options[sel.selectedIndex]?.textContent || '';
+      document.getElementById('tit-bib-est').textContent = `Registro de Biblioteca — ${nombre}`;
+
+      const r = await fetch(`/api/alumno/${aid}`);
+      const d = await r.json();
+      const tbody = document.getElementById('tabla-bib-est');
+      tbody.textContent = '';
+      const lista = d.biblioteca || [];
+      if (lista.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td'); td.colSpan = 3; td.style.textAlign = 'center'; td.style.color = '#64748b';
+        td.textContent = 'Este estudiante no tiene movimientos de biblioteca registrados.';
+        tr.appendChild(td); tbody.appendChild(tr); return;
+      }
+      lista.forEach((bItem) => {
+        const tr = document.createElement('tr');
+        [String(bItem.fecha).slice(0, 10), bItem.libro].forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+        const tdA = document.createElement('td');
+        const b = document.createElement('span');
+        b.className = 'badge ' + (bItem.accion === 'NO_DEVUELTO' ? 'badge-ROJO' : (bItem.accion === 'DEVOLUCION_TARDIA' ? 'badge-AMBAR' : 'badge-VERDE'));
+        b.textContent = bItem.accion;
+        tdA.appendChild(b); tr.appendChild(tdA);
+        tbody.appendChild(tr);
+      });
+    }
+
     async function cargar() {
       const rd = await fetch('/api/dashboard');
       const alumnos = ((await rd.json()).alumnos || []).sort((a, b) => a.alumno_id - b.alumno_id);
@@ -62,7 +110,10 @@
           sel.appendChild(opt);
         });
       }
+      await cargarHistorialBiblioteca();
     }
+
+    document.getElementById('bib-alumno').addEventListener('change', cargarHistorialBiblioteca);
 
     document.getElementById('form-biblioteca').addEventListener('submit', async (ev) => {
       ev.preventDefault();

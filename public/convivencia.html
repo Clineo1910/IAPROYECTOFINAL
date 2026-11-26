@@ -50,6 +50,24 @@
             </form>
             <div id="toast-inc" class="toast-ok" hidden></div>
           </div>
+
+          <!-- Registro de Convivencia SOLO del estudiante seleccionado -->
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2 id="tit-inc-est">Registro de Convivencia del Estudiante</h2>
+                <p>Cambia el estudiante arriba para ver su historial individual</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Fecha</th><th>Tipo</th><th>Gravedad</th><th>Descripción</th></tr>
+                </thead>
+                <tbody id="tabla-inc-est"></tbody>
+              </table>
+            </div>
+          </div>
         </section>
         <aside id="sige-chat-panel" class="chat-panel"></aside>
       </main>
@@ -58,6 +76,35 @@
 
   <script src="/layout.js?v=3"></script>
   <script>
+    async function cargarHistorialEstudiante() {
+      const sel = document.getElementById('inc-alumno');
+      const aid = sel.value;
+      if (!aid) return;
+      const nombre = sel.options[sel.selectedIndex]?.textContent || '';
+      document.getElementById('tit-inc-est').textContent = `Registro de Convivencia — ${nombre}`;
+
+      const r = await fetch(`/api/alumno/${aid}`);
+      const d = await r.json();
+      const tbody = document.getElementById('tabla-inc-est');
+      tbody.textContent = '';
+      const lista = d.incidencias || [];
+      if (lista.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td'); td.colSpan = 4; td.style.textAlign = 'center'; td.style.color = '#64748b';
+        td.textContent = 'Este estudiante no tiene incidencias de convivencia registradas.';
+        tr.appendChild(td); tbody.appendChild(tr); return;
+      }
+      lista.forEach((i) => {
+        const tr = document.createElement('tr');
+        [String(i.fecha).slice(0, 10), i.tipo].forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+        const tdG = document.createElement('td');
+        const b = document.createElement('span'); b.className = 'badge ' + (i.gravedad === 'ALTA' ? 'badge-ROJO' : (i.gravedad === 'MEDIA' ? 'badge-AMBAR' : 'badge-VERDE')); b.textContent = i.gravedad;
+        tdG.appendChild(b); tr.appendChild(tdG);
+        const tdD = document.createElement('td'); tdD.textContent = i.descripcion; tr.appendChild(tdD);
+        tbody.appendChild(tr);
+      });
+    }
+
     async function cargar() {
       const rd = await fetch('/api/dashboard');
       const alumnos = ((await rd.json()).alumnos || []).sort((a, b) => a.alumno_id - b.alumno_id);
@@ -70,7 +117,10 @@
           sel.appendChild(opt);
         });
       }
+      await cargarHistorialEstudiante();
     }
+
+    document.getElementById('inc-alumno').addEventListener('change', cargarHistorialEstudiante);
 
     document.getElementById('form-incidencia').addEventListener('submit', async (ev) => {
       ev.preventDefault();
