@@ -1163,8 +1163,55 @@ def _enviar_tg(token: str, chat_id, texto: str, reply_markup=None):
     )
 
 
+def _consultar_agente_telegram(token: str, chat_id, al: dict, consulta_usuario: str):
+    """Envía toda consulta del apoderado en Telegram al flujo completo n8n -> Gemini -> MCP -> PostgreSQL."""
+    try:
+        requests.post(
+            f'https://api.telegram.org/bot{token}/sendChatAction',
+            json={'chat_id': chat_id, 'action': 'typing'},
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+    mensaje_agente = (
+        f"(Apoderado autenticado vía Telegram, solo autorizado para su hijo "
+        f"{al['nombre_completo']} ID {al['id']}) {consulta_usuario}"
+    )
+    print(f"[TELEGRAM -> N8N/MCP] chat_id={chat_id} alumno_id={al['id']} consulta={consulta_usuario[:80]!r}")
+    try:
+        r_ia = requests.post(
+            N8N_WEBHOOK_URL,
+            json={'sesion': f'tg_{chat_id}', 'rol': 'padre', 'mensaje': mensaje_agente},
+            timeout=60,
+        )
+        if r_ia.ok:
+            resp_ia = (r_ia.json().get('respuesta') or '').strip()
+        else:
+            print(f'[TELEGRAM -> N8N/MCP] n8n respondió HTTP {r_ia.status_code}')
+            resp_ia = ''
+    except Exception as exc:
+        print('[TELEGRAM -> N8N/MCP] Error conectando con n8n:', exc)
+        resp_ia = ''
+
+    if resp_ia:
+        _enviar_tg(
+            token,
+            chat_id,
+            f"🤖 SIGE-Bot (vía n8n + MCP):\n\n{resp_ia}",
+            reply_markup=_botones_alumno_telegram(al['id']),
+        )
+    else:
+        _enviar_tg(
+            token,
+            chat_id,
+            '⚠️ El asistente SIGE-Bot (n8n / Servidor MCP) no respondió en este momento. Verifica que n8n y el servidor MCP estén activos.',
+            reply_markup=_botones_alumno_telegram(al['id']),
+        )
+
+
 def _bucle_vinculacion_telegram():
-    """Escucha mensajes y botones en @SIGE360_Alertas_Bot: vinculación por código, historial/asistencia y consultas a SIGE-Bot."""
+    """Escucha mensajes y botones en @SIGE360_Alertas_Bot: vinculación por código y consultas 100% vía n8n + MCP."""
     offset = 0
     load_dotenv(os.path.join(RAIZ, '.env'), override=True)
     token = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
@@ -1189,7 +1236,7 @@ def _bucle_vinculacion_telegram():
             for upd in resp.get('result', []):
                 offset = upd['update_id'] + 1
 
-                # 1. Botones interactivos (callback_query)
+                # 1. Botones interactivos (callback_query) -> pasan por n8n + MCP
                 cb = upd.get('callback_query')
                 if cb:
                     cb_id = cb.get('id')
@@ -1198,7 +1245,7 @@ def _bucle_vinculacion_telegram():
                     try:
                         requests.post(
                             f'https://api.telegram.org/bot{token}/answerCallbackQuery',
-                            json={'callback_query_id': cb_id},
+                            json={'callback_query_id': cb_id, 'text': 'Consultando a SIGE-Bot (MCP)...'},
                             timeout=6,
                         )
                     except Exception:
@@ -1219,18 +1266,18 @@ def _bucle_vinculacion_telegram():
                         )
                         continue
                     if accion == 'hist':
-                        _enviar_tg(
+                        _consultar_agente_telegram(
                             token,
                             chat_id,
-                            _construir_resumen_historial_telegram(al['id']),
-                            reply_markup=_botones_alumno_telegram(al['id']),
+                            al,
+                            f"Consulta el historial académico y las notas por curso de mi hijo {al['nombre_completo']} (ID {al['id']}) y dame un resumen claro con recomendaciones de apoyo en casa.",
                         )
                     elif accion == 'asis':
-                        _enviar_tg(
+                        _consultar_agente_telegram(
                             token,
                             chat_id,
-                            _construir_resumen_asistencia_telegram(al['id']),
-                            reply_markup=_botones_alumno_telegram(al['id']),
+                            al,
+                            f"Consulta el historial de asistencia, tardanzas y faltas recientes de mi hijo {al['nombre_completo']} (ID {al['id']}) y dime si requiere seguimiento.",
                         )
                     elif accion == 'ack':
                         try:
@@ -1248,12 +1295,12 @@ def _bucle_vinculacion_telegram():
                             token,
                             chat_id,
                             f"✅ Confirmación registrada para {al['nombre_completo']}. El tutor ha sido notificado.\n\n"
-                            f"Si deseas revisar sus notas o asistencia ahora, usa los botones o escríbeme tu pregunta.",
+                            f"Si deseas revisar sus notas o asistencia con SIGE-Bot, usa los botones o escríbeme tu pregunta.",
                             reply_markup=_botones_alumno_telegram(al['id']),
                         )
                     continue
 
-                # 2. Mensajes de texto del apoderado
+                # 2. Mensajes de texto del apoderado -> pasan por n8n + MCP
                 msg = upd.get('message') or {}
                 chat_id = (msg.get('chat') or {}).get('id')
                 texto = (msg.get('text') or '').strip()
@@ -1291,7 +1338,6 @@ def _bucle_vinculacion_telegram():
                         )
                     continue
 
-                # Si el padre ya está vinculado, permitir consultas directas de historial, asistencia o chat con SIGE-Bot
                 al_vinc = _buscar_alumno_por_chat_id(str(chat_id))
                 if al_vinc:
                     t_low = ''.join(
@@ -1301,67 +1347,20 @@ def _bucle_vinculacion_telegram():
                         _enviar_tg(
                             token,
                             chat_id,
-                            f"🏫 Hola, soy SIGE-Bot (asistente de IA de SIGE-360).\n"
+                            f"🏫 Hola, soy SIGE-Bot (asistente de IA de SIGE-360 conectado a n8n + MCP).\n"
                             f"Estudiante vinculado: {al_vinc['nombre_completo']} ({al_vinc['grado']} {al_vinc['seccion']}).\n\n"
                             f"Toca un botón o escríbeme cualquier consulta sobre sus notas o asistencia:",
                             reply_markup=_botones_alumno_telegram(al_vinc['id']),
                         )
-                    elif t_low in ('si', 's', 'ok', 'claro', 'por favor', 'historial', 'notas', 'ver historial', 'quiero ver su historial', 'consultar historial') or 'historial' in t_low:
-                        _enviar_tg(
+                    elif t_low in ('si', 's', 'ok', 'claro', 'por favor'):
+                        _consultar_agente_telegram(
                             token,
                             chat_id,
-                            _construir_resumen_historial_telegram(al_vinc['id']),
-                            reply_markup=_botones_alumno_telegram(al_vinc['id']),
-                        )
-                    elif 'asistencia' in t_low or 'faltas' in t_low or 'tardanza' in t_low:
-                        _enviar_tg(
-                            token,
-                            chat_id,
-                            _construir_resumen_asistencia_telegram(al_vinc['id']),
-                            reply_markup=_botones_alumno_telegram(al_vinc['id']),
+                            al_vinc,
+                            f"Sí, quiero consultar el historial académico, notas y asistencia actual de mi hijo {al_vinc['nombre_completo']} (ID {al_vinc['id']}).",
                         )
                     else:
-                        # Consulta abierta al agente SIGE-Bot (n8n + MCP) con rol='padre'
-                        try:
-                            requests.post(
-                                f'https://api.telegram.org/bot{token}/sendChatAction',
-                                json={'chat_id': chat_id, 'action': 'typing'},
-                                timeout=5,
-                            )
-                        except Exception:
-                            pass
-                        try:
-                            mensaje_agente = (
-                                f"(Apoderado autenticado vía Telegram, solo autorizado para su hijo "
-                                f"{al_vinc['nombre_completo']} ID {al_vinc['id']}) {texto}"
-                            )
-                            r_ia = requests.post(
-                                N8N_WEBHOOK_URL,
-                                json={'sesion': f'tg_{chat_id}', 'rol': 'padre', 'mensaje': mensaje_agente},
-                                timeout=45,
-                            )
-                            if r_ia.ok:
-                                resp_ia = (r_ia.json().get('respuesta') or '').strip()
-                            else:
-                                resp_ia = ''
-                        except Exception as exc:
-                            print('[TELEGRAM->N8N] Error:', exc)
-                            resp_ia = ''
-
-                        if resp_ia:
-                            _enviar_tg(
-                                token,
-                                chat_id,
-                                f"🤖 SIGE-Bot:\n\n{resp_ia}",
-                                reply_markup=_botones_alumno_telegram(al_vinc['id']),
-                            )
-                        else:
-                            _enviar_tg(
-                                token,
-                                chat_id,
-                                _construir_resumen_historial_telegram(al_vinc['id']),
-                                reply_markup=_botones_alumno_telegram(al_vinc['id']),
-                            )
+                        _consultar_agente_telegram(token, chat_id, al_vinc, texto)
                 else:
                     respuesta_bot = (
                         "🏫 Bienvenido a SIGE-360 Alertas.\n"
