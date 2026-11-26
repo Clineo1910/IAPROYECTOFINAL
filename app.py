@@ -815,16 +815,18 @@ def api_chat(entrada: ChatEntrada, request: Request):
         mensaje_enviado = mensaje
 
     try:
+        print(f"\n[CHAT WEB] rol={rol} usuario={user['nombre']} | pregunta: {mensaje}", flush=True)
         r = requests.post(
             N8N_WEBHOOK_URL,
             json={'sesion': sid, 'rol': rol, 'mensaje': mensaje_enviado},
             timeout=60,
         )
         if not r.ok:
-            print(f'[CHAT] n8n respondió HTTP {r.status_code}')
+            print(f'[CHAT] n8n respondió HTTP {r.status_code}', flush=True)
             return {'respuesta': 'El asistente no está disponible en este momento (verifica que el flujo de n8n esté activo).'}
         datos = r.json()
         texto = (datos.get('respuesta') or '').strip()
+        print(f"[CHAT WEB -> RESPUESTA]\n{texto}\n{'─' * 60}", flush=True)
         return {'respuesta': texto or 'No pude elaborar una respuesta. Intente con otra pregunta.'}
     except Exception as exc:
         print('[CHAT] Error conectando con n8n:', exc)
@@ -1004,6 +1006,7 @@ def api_enviar_telegram(entrada: AlertaTelegramEntrada, request: Request):
             r.raise_for_status()
             enviado_externo = True
             detalle = f'Enviado en vivo por Telegram ({origen_destino}) y publicado en Portal de Padres.'
+            print(f"\n[TELEGRAM ALERTA -> {origen_destino} ({chat_id_destino})]\n{texto}\n{'─' * 60}", flush=True)
         except Exception as exc:
             print('[TELEGRAM] Error:', exc)
             detalle = 'Guardado en Portal de Padres (Telegram no respondió; verifica tu token/chat_id).'
@@ -1215,6 +1218,7 @@ def _consultar_agente_telegram(token: str, chat_id, al: dict, consulta_usuario: 
         resp_ia = ''
 
     if resp_ia:
+        print(f"[TELEGRAM -> RESPUESTA ENVIADA a {chat_id}]\n{resp_ia}\n{'─' * 60}", flush=True)
         encabezado = (
             f"🤖 <b>SIGE-Bot · SIGE-360</b>\n"
             f"🎓 <i>{html.escape(al['nombre_completo'])} · {html.escape(al['grado'])} {html.escape(al['seccion'])}</i>\n"

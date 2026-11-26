@@ -33,12 +33,14 @@ mcp = FastMCP('sige360-herramientas')
 def registrar_auditoria_mcp(herramienta: str, parametros: dict, resumen: str, inicio: float):
     """Guarda un rastro ligero local para el panel Rayos X MCP en tiempo real."""
     try:
+        ms = int((time.perf_counter() - inicio) * 1000)
+        print(f"[MCP -> RESULTADO] {herramienta} => {resumen} ({ms} ms)", flush=True)
         evento = {
             'hora': datetime.now().strftime('%H:%M:%S'),
             'herramienta': herramienta,
             'parametros': parametros,
             'resumen': resumen,
-            'ms': int((time.perf_counter() - inicio) * 1000),
+            'ms': ms,
         }
         with open(AUDIT_FILE, 'a', encoding='utf-8') as f:
             f.write(json.dumps(evento, ensure_ascii=False) + '\n')
