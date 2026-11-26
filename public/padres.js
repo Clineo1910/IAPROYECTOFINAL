@@ -68,6 +68,11 @@ async function cargarPortalPadre() {
   document.getElementById('hijo-faltas').textContent = String(a.faltas);
   document.getElementById('hijo-tardanzas').textContent = String(a.tardanzas);
 
+  const chipResumen = document.getElementById('chip-resumen-hijo');
+  if (chipResumen && a.nombre_completo) {
+    chipResumen.dataset.prompt = `¿Cómo van las notas y la asistencia de mi hijo ${a.nombre_completo}?`;
+  }
+
   const badge = document.getElementById('hijo-estado-badge');
   badge.className = `badge badge-${a.nivel_semaforo}`;
   badge.textContent = a.nivel_semaforo === 'ROJO'
@@ -76,29 +81,93 @@ async function cargarPortalPadre() {
 
   const tbNotas = document.getElementById('tabla-notas-hijo');
   tbNotas.textContent = '';
+  const porCurso = new Map();
   (d.notas || []).forEach((n) => {
-    const tr = document.createElement('tr');
-    [n.curso, `Bim. ${n.bimestre}`].forEach((v) => {
-      const td = document.createElement('td');
-      td.textContent = v;
-      tr.appendChild(td);
-    });
-    const tdN = document.createElement('td');
+    if (!porCurso.has(n.curso)) {
+      porCurso.set(n.curso, { 1: null, 2: null, 3: null, 4: null });
+    }
+    const bim = Number(n.bimestre);
+    const reg = porCurso.get(n.curso);
+    if (bim >= 1 && bim <= 4 && reg[bim] === null) {
+      reg[bim] = Number(n.nota);
+    }
+  });
+
+  const cursosOrdenados = Array.from(porCurso.keys()).sort((x, y) => x.localeCompare(y, 'es'));
+  const sumBim = { 1: [], 2: [], 3: [], 4: [] };
+
+  const crearCeldaNota = (val, destacado = false) => {
+    const td = document.createElement('td');
+    td.style.textAlign = 'center';
+    if (val === null || Number.isNaN(val)) {
+      td.style.color = '#94a3b8';
+      td.textContent = '—';
+      return td;
+    }
     const bn = document.createElement('span');
-    bn.className = `badge ${n.nota < 11 ? 'badge-ROJO' : (n.nota < 14 ? 'badge-AMBAR' : 'badge-VERDE')}`;
-    bn.textContent = Number(n.nota).toFixed(1);
-    tdN.appendChild(bn);
-    tr.appendChild(tdN);
+    bn.className = `badge ${val < 11 ? 'badge-ROJO' : (val < 14 ? 'badge-AMBAR' : 'badge-VERDE')}`;
+    if (destacado) bn.style.fontWeight = '700';
+    bn.textContent = val.toFixed(1);
+    td.appendChild(bn);
+    return td;
+  };
+
+  cursosOrdenados.forEach((curso) => {
+    const reg = porCurso.get(curso);
+    const tr = document.createElement('tr');
+    const tdC = document.createElement('td');
+    tdC.style.fontWeight = '600';
+    tdC.textContent = curso;
+    tr.appendChild(tdC);
+
+    const vals = [];
+    [1, 2, 3, 4].forEach((b) => {
+      const v = reg[b];
+      if (v !== null) {
+        vals.push(v);
+        sumBim[b].push(v);
+      }
+      tr.appendChild(crearCeldaNota(v));
+    });
+
+    const prom = vals.length ? (vals.reduce((acc, x) => acc + x, 0) / vals.length) : null;
+    tr.appendChild(crearCeldaNota(prom, true));
 
     const tdDes = document.createElement('td');
-    tdDes.textContent = n.nota >= 14 ? 'Logro esperado' : (n.nota >= 11 ? 'En proceso' : 'En inicio (refuerzo)');
+    if (prom === null) {
+      tdDes.textContent = 'Sin notas';
+    } else {
+      tdDes.textContent = prom >= 14 ? 'Logro esperado' : (prom >= 11 ? 'En proceso' : 'En inicio (refuerzo)');
+      if (prom < 11) tdDes.style.color = '#b91c1c';
+    }
     tr.appendChild(tdDes);
-
-    const tdF = document.createElement('td');
-    tdF.textContent = String(n.fecha_registro).slice(0, 10);
-    tr.appendChild(tdF);
     tbNotas.appendChild(tr);
   });
+
+  if (cursosOrdenados.length) {
+    const trTot = document.createElement('tr');
+    trTot.style.background = '#f8fafc';
+    trTot.style.borderTop = '2px solid #cbd5e1';
+    const tdLbl = document.createElement('td');
+    tdLbl.style.fontWeight = '700';
+    tdLbl.textContent = 'Promedio por Bimestre';
+    trTot.appendChild(tdLbl);
+
+    const promsBim = [];
+    [1, 2, 3, 4].forEach((b) => {
+      const arr = sumBim[b];
+      const p = arr.length ? (arr.reduce((acc, x) => acc + x, 0) / arr.length) : null;
+      if (p !== null) promsBim.push(p);
+      trTot.appendChild(crearCeldaNota(p, true));
+    });
+    const promFinal = promsBim.length ? (promsBim.reduce((acc, x) => acc + x, 0) / promsBim.length) : null;
+    trTot.appendChild(crearCeldaNota(promFinal, true));
+    const tdFin = document.createElement('td');
+    tdFin.style.fontWeight = '600';
+    tdFin.textContent = promFinal !== null ? (promFinal >= 14 ? 'Satisfactorio' : (promFinal >= 11 ? 'En progreso' : 'Requiere refuerzo')) : '--';
+    trTot.appendChild(tdFin);
+    tbNotas.appendChild(trTot);
+  }
 
   const tbAsis = document.getElementById('tabla-asistencia-hijo');
   tbAsis.textContent = '';

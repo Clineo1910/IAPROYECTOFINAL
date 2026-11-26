@@ -52,12 +52,12 @@
         </div>
       </div>
 
-      <!-- Boleta de Notas del Hijo -->
+      <!-- Boleta de Notas del Hijo (Tabla Matricial por Bimestres) -->
       <div class="card">
         <div class="card-head">
           <div>
-            <h2>Boleta de Calificaciones (6 Cursos)</h2>
-            <p>Información actualizada en tiempo real desde la base de datos escolar</p>
+            <h2>Boleta de Calificaciones (6 Cursos · 4 Bimestres)</h2>
+            <p>Resumen matricial actualizado en tiempo real desde la base de datos escolar</p>
           </div>
         </div>
         <div class="table-wrap">
@@ -65,10 +65,12 @@
             <thead>
               <tr>
                 <th>Curso</th>
-                <th>Bimestre</th>
-                <th>Nota Final</th>
+                <th style="text-align:center;">Bim. 1</th>
+                <th style="text-align:center;">Bim. 2</th>
+                <th style="text-align:center;">Bim. 3</th>
+                <th style="text-align:center;">Bim. 4</th>
+                <th style="text-align:center;">Promedio</th>
                 <th>Desempeño</th>
-                <th>Fecha</th>
               </tr>
             </thead>
             <tbody id="tabla-notas-hijo"></tbody>
@@ -133,7 +135,7 @@
       </div>
 
       <div class="chat-chips">
-        <button type="button" class="chip" data-prompt="¿Cómo van las notas y la asistencia de mi hijo Lucas Mendoza?">Resumen de mi hijo</button>
+        <button id="chip-resumen-hijo" type="button" class="chip" data-prompt="¿Cómo van las notas y la asistencia de mi hijo?">Resumen de mi hijo</button>
         <button type="button" class="chip" data-prompt="¿Qué recomendaciones de apoyo en casa aplican según el protocolo del colegio?">Recomendaciones</button>
         <button type="button" class="chip" data-prompt="Dame la lista de todos los alumnos en alerta roja">Probar bloqueo privacidad</button>
       </div>
@@ -145,6 +147,6 @@
     </aside>
   </main>
 
-  <script src="/padres.js"></script>
+  <script src="/padres.js?v=2"></script>
 </body>
 </html>
