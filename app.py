@@ -465,11 +465,11 @@ def api_alumno_detalle(alumno_id: int, request: Request):
             return JSONResponse({'error': 'Alumno no encontrado'}, status_code=404)
         perfil = evaluar_fila(filas[0])
         notas = consultar(
-            "SELECT curso, bimestre, nota, fecha_registro FROM notas WHERE alumno_id = %s ORDER BY fecha_registro DESC LIMIT 12",
+            "SELECT curso, bimestre, nota, fecha_registro FROM notas WHERE alumno_id = %s ORDER BY bimestre DESC, fecha_registro DESC LIMIT 40",
             (alumno_id,),
         )
         asistencia = consultar(
-            "SELECT fecha, estado, hora_rfid, origen FROM asistencia WHERE alumno_id = %s ORDER BY fecha DESC LIMIT 10",
+            "SELECT fecha, estado, hora_rfid, origen FROM asistencia WHERE alumno_id = %s ORDER BY fecha DESC LIMIT 30",
             (alumno_id,),
         )
         incidencias = consultar(
@@ -1215,7 +1215,7 @@ def _consultar_agente_telegram(token: str, chat_id, al: dict, consulta_usuario: 
     )
     print(f"[TELEGRAM -> N8N/MCP] chat_id={chat_id} alumno_id={al['id']} consulta={consulta_usuario[:80]!r}")
     try:
-        r_ia = requests.post(
+        r_ia = requests.post(   
             N8N_WEBHOOK_URL,
             json={'sesion': f'tg_{chat_id}', 'rol': 'padre', 'mensaje': mensaje_agente},
             timeout=60,

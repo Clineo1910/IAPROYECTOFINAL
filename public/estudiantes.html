@@ -63,23 +63,23 @@
     </div>
   </div>
 
-  <!-- MODAL FICHA 360° -->
+  <!-- MODAL REPORTE INTEGRAL 360° -->
   <div id="modal-ficha" class="modal-backdrop" hidden>
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-nombre">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-nombre" style="max-width:920px;">
       <div class="print-only print-letterhead">
         <div>
-          <h1>SIGE-360 · Ficha Integral 360° del Estudiante</h1>
+          <h1>SIGE-360 · Reporte Integral 360° del Estudiante</h1>
           <p>Reporte Predictivo de Riesgo Escolar · Uso exclusivo docente/tutoría (Ley N.° 29733)</p>
         </div>
         <div style="text-align:right;font-size:0.75rem;color:#475569;">Año Escolar 2026</div>
       </div>
       <div class="modal-head">
         <div>
-          <h2 id="modal-nombre" style="margin:0;font-size:1.05rem;">Ficha 360°</h2>
+          <h2 id="modal-nombre" style="margin:0;font-size:1.1rem;">Reporte 360°</h2>
           <small id="modal-sub" style="color:#64748b;"></small>
         </div>
         <div style="display:flex;gap:8px;">
-          <button type="button" class="btn btn-primary no-print" onclick="document.body.classList.add('printing-ficha');window.print();setTimeout(()=>document.body.classList.remove('printing-ficha'),300);">🖨️ Exportar PDF</button>
+          <button type="button" class="btn btn-primary no-print" onclick="document.body.classList.add('printing-ficha');window.print();setTimeout(()=>document.body.classList.remove('printing-ficha'),300);">🖨️ Exportar Reporte PDF</button>
           <button id="btn-cerrar-modal" class="btn btn-secondary no-print" type="button">Cerrar</button>
         </div>
       </div>
@@ -168,13 +168,19 @@
 
       lista.forEach((a) => {
         const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.title = 'Clic para ver reporte detallado con gráficos';
+        tr.addEventListener('click', (ev) => {
+          if (ev.target.closest('button')) return;
+          abrirFicha360(a.alumno_id);
+        });
 
         // Estudiante
         const tdE = document.createElement('td');
         const cell = document.createElement('div'); cell.className = 'student-cell';
         const av = document.createElement('span'); av.className = `avatar avatar-${a.nivel_semaforo}`; av.textContent = iniciales(a.nombre_completo);
         const info = document.createElement('div');
-        const nom = document.createElement('span'); nom.className = 'student-name'; nom.textContent = a.nombre_completo;
+        const nom = document.createElement('span'); nom.className = 'student-name'; nom.style.color = '#1d4ed8'; nom.textContent = a.nombre_completo;
         const cod = document.createElement('span'); cod.className = 'student-code'; cod.textContent = `ID ${a.alumno_id} · ${a.codigo_estudiante}`;
         info.append(nom, cod); cell.append(av, info); tdE.appendChild(cell);
 
@@ -198,7 +204,7 @@
 
         const tdAcc = document.createElement('td');
         tdAcc.style.display = 'flex'; tdAcc.style.gap = '6px'; tdAcc.style.flexWrap = 'wrap';
-        const bFicha = document.createElement('button'); bFicha.type = 'button'; bFicha.className = 'btn btn-secondary btn-xs'; bFicha.textContent = 'Ficha 360°';
+        const bFicha = document.createElement('button'); bFicha.type = 'button'; bFicha.className = 'btn btn-secondary btn-xs'; bFicha.textContent = '📊 Reporte';
         bFicha.addEventListener('click', () => abrirFicha360(a.alumno_id));
         const bEdit = document.createElement('button'); bEdit.type = 'button'; bEdit.className = 'btn btn-secondary btn-xs'; bEdit.textContent = 'Editar';
         bEdit.addEventListener('click', () => abrirEditarEst(a));
@@ -221,38 +227,309 @@
       });
     }
 
+    function crearSvgEl(tag, attrs = {}) {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, String(v)));
+      return el;
+    }
+
+    function construirGraficoBarrasCursos(cursosProm) {
+      const wrap = document.createElement('div');
+      wrap.style.background = '#f8fafc';
+      wrap.style.border = '1px solid #e2e8f0';
+      wrap.style.borderRadius = '12px';
+      wrap.style.padding = '14px';
+
+      const tit = document.createElement('strong');
+      tit.textContent = '📊 Promedio por Área Curricular (0–20)';
+      tit.style.display = 'block';
+      tit.style.fontSize = '0.84rem';
+      tit.style.marginBottom = '8px';
+      wrap.appendChild(tit);
+
+      const W = 420, H = 190, padL = 28, padR = 12, padT = 20, padB = 42;
+      const chartW = W - padL - padR, chartH = H - padT - padB;
+      const svg = crearSvgEl('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', height: '190' });
+
+      // Líneas de referencia (0, 11 aprobatorio, 20)
+      [0, 11, 20].forEach((val) => {
+        const y = padT + chartH - (val / 20) * chartH;
+        svg.appendChild(crearSvgEl('line', {
+          x1: padL, y1: y, x2: W - padR, y2: y,
+          stroke: val === 11 ? '#ef4444' : '#cbd5e1',
+          'stroke-dasharray': val === 11 ? '4 3' : '',
+          'stroke-width': val === 11 ? '1.3' : '1',
+        }));
+        const lbl = crearSvgEl('text', { x: padL - 5, y: y + 3, 'text-anchor': 'end', 'font-size': '9', fill: val === 11 ? '#dc2626' : '#64748b' });
+        lbl.textContent = String(val);
+        svg.appendChild(lbl);
+      });
+
+      const n = Math.max(1, cursosProm.length);
+      const slot = chartW / n;
+      const barW = Math.min(36, slot * 0.56);
+
+      cursosProm.forEach((item, idx) => {
+        const val = Math.max(0, Math.min(20, item.prom));
+        const bh = (val / 20) * chartH;
+        const x = padL + idx * slot + (slot - barW) / 2;
+        const y = padT + chartH - bh;
+        const color = val < 11 ? '#ef4444' : (val < 14 ? '#f59e0b' : '#16a34a');
+
+        svg.appendChild(crearSvgEl('rect', { x, y, width: barW, height: Math.max(2, bh), rx: 5, fill: color }));
+        const txtV = crearSvgEl('text', { x: x + barW / 2, y: y - 4, 'text-anchor': 'middle', 'font-size': '10', 'font-weight': '700', fill: '#0f172a' });
+        txtV.textContent = val.toFixed(1);
+        svg.appendChild(txtV);
+
+        const corto = item.curso.replace('Ciencia y Tecnología', 'CyT').replace('Historia y Geografía', 'Historia').slice(0, 10);
+        const txtC = crearSvgEl('text', { x: x + barW / 2, y: H - 14, 'text-anchor': 'middle', 'font-size': '9.5', fill: '#475569' });
+        txtC.textContent = corto;
+        svg.appendChild(txtC);
+      });
+
+      wrap.appendChild(svg);
+      return wrap;
+    }
+
+    function construirGraficoPastelAsistencia(presentes, tardanzas, faltas) {
+      const wrap = document.createElement('div');
+      wrap.style.background = '#f8fafc';
+      wrap.style.border = '1px solid #e2e8f0';
+      wrap.style.borderRadius = '12px';
+      wrap.style.padding = '14px';
+
+      const tit = document.createElement('strong');
+      tit.textContent = '🥧 Distribución de Asistencia RFID';
+      tit.style.display = 'block';
+      tit.style.fontSize = '0.84rem';
+      tit.style.marginBottom = '8px';
+      wrap.appendChild(tit);
+
+      const total = presentes + tardanzas + faltas;
+      const body = document.createElement('div');
+      body.style.display = 'flex';
+      body.style.alignItems = 'center';
+      body.style.justifyContent = 'space-around';
+      body.style.gap = '12px';
+
+      const svg = crearSvgEl('svg', { viewBox: '0 0 140 140', width: '140', height: '140' });
+      const cx = 70, cy = 70, r = 46, circ = 2 * Math.PI * r;
+      const segs = [
+        { label: 'Presentes', val: presentes, color: '#16a34a' },
+        { label: 'Tardanzas', val: tardanzas, color: '#f59e0b' },
+        { label: 'Faltas', val: faltas, color: '#ef4444' },
+      ];
+
+      if (total === 0) {
+        svg.appendChild(crearSvgEl('circle', { cx, cy, r, fill: 'none', stroke: '#cbd5e1', 'stroke-width': '20' }));
+      } else {
+        let offset = 0;
+        segs.forEach((s) => {
+          if (s.val <= 0) return;
+          const frac = s.val / total;
+          const dash = frac * circ;
+          svg.appendChild(crearSvgEl('circle', {
+            cx, cy, r, fill: 'none', stroke: s.color, 'stroke-width': '22',
+            'stroke-dasharray': `${dash} ${circ - dash}`,
+            'stroke-dashoffset': String(-offset),
+            transform: `rotate(-90 ${cx} ${cy})`,
+          }));
+          offset += dash;
+        });
+      }
+
+      const pctPres = total ? Math.round((presentes / total) * 100) : 0;
+      const tVal = crearSvgEl('text', { x: cx, y: cy + 2, 'text-anchor': 'middle', 'font-size': '16', 'font-weight': '800', fill: '#0f172a' });
+      tVal.textContent = `${pctPres}%`;
+      const tSub = crearSvgEl('text', { x: cx, y: cy + 16, 'text-anchor': 'middle', 'font-size': '8.5', fill: '#64748b' });
+      tSub.textContent = 'asistencia';
+      svg.append(tVal, tSub);
+
+      const legend = document.createElement('div');
+      legend.style.display = 'flex';
+      legend.style.flexDirection = 'column';
+      legend.style.gap = '7px';
+      legend.style.fontSize = '0.8rem';
+      segs.forEach((s) => {
+        const row = document.createElement('div');
+        row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.gap = '7px';
+        const dot = document.createElement('span');
+        dot.style.width = '10px'; dot.style.height = '10px'; dot.style.borderRadius = '50%'; dot.style.background = s.color; dot.style.display = 'inline-block';
+        const txt = document.createElement('span');
+        const pct = total ? Math.round((s.val / total) * 100) : 0;
+        txt.textContent = `${s.label}: ${s.val} (${pct}%)`;
+        row.append(dot, txt);
+        legend.appendChild(row);
+      });
+
+      body.append(svg, legend);
+      wrap.appendChild(body);
+      return wrap;
+    }
+
+    function construirGraficoRiesgo(desglose, indice, nivel) {
+      const wrap = document.createElement('div');
+      wrap.style.background = '#f8fafc';
+      wrap.style.border = '1px solid #e2e8f0';
+      wrap.style.borderRadius = '12px';
+      wrap.style.padding = '14px';
+
+      const head = document.createElement('div');
+      head.style.display = 'flex'; head.style.justifyContent = 'space-between'; head.style.alignItems = 'center'; head.style.marginBottom = '10px';
+      const tit = document.createElement('strong');
+      tit.textContent = '🎯 Desglose del Índice Predictivo (4 Señales)';
+      tit.style.fontSize = '0.84rem';
+      const badge = document.createElement('span');
+      badge.className = `badge badge-${nivel}`;
+      badge.textContent = `${indice}/100 · ${nivel}`;
+      head.append(tit, badge);
+      wrap.appendChild(head);
+
+      const items = [
+        ['Asistencia RFID', desglose.asistencia_pts, 40, '#ef4444'],
+        ['Rendimiento Académico', desglose.notas_pts, 30, '#2563eb'],
+        ['Convivencia Escolar', desglose.convivencia_pts, 20, '#f59e0b'],
+        ['Biblioteca Escolar', desglose.biblioteca_pts, 10, '#7c3aed'],
+      ];
+      items.forEach(([lbl, pts, max, color]) => {
+        const row = document.createElement('div');
+        row.style.marginBottom = '8px';
+        const top = document.createElement('div');
+        top.style.display = 'flex'; top.style.justifyContent = 'space-between'; top.style.fontSize = '0.78rem'; top.style.marginBottom = '3px';
+        const s1 = document.createElement('span'); s1.textContent = lbl;
+        const s2 = document.createElement('strong'); s2.textContent = `${pts} / ${max} pts`;
+        top.append(s1, s2);
+        const track = document.createElement('div');
+        track.style.height = '8px'; track.style.background = '#e2e8f0'; track.style.borderRadius = '999px'; track.style.overflow = 'hidden';
+        const fill = document.createElement('div');
+        fill.style.height = '100%';
+        fill.style.width = `${Math.min(100, Math.round((pts / max) * 100))}%`;
+        fill.style.background = color;
+        fill.style.borderRadius = '999px';
+        track.appendChild(fill);
+        row.append(top, track);
+        wrap.appendChild(row);
+      });
+      return wrap;
+    }
+
     async function abrirFicha360(alumnoId) {
       const modal = document.getElementById('modal-ficha');
       const body = document.getElementById('modal-body');
-      modal.hidden = false; body.textContent = 'Cargando Ficha 360°...';
+      modal.hidden = false; body.textContent = 'Cargando Reporte Integral 360°...';
       const r = await fetch(`/api/alumno/${alumnoId}`);
       const d = await r.json();
       if (!r.ok) { body.textContent = 'Error cargando ficha.'; return; }
       const p = d.perfil;
       document.getElementById('modal-nombre').textContent = `${p.nombre_completo} · ${p.nivel_semaforo} (${p.indice_riesgo}/100)`;
-      document.getElementById('modal-sub').textContent = `${p.codigo_estudiante} · ${p.grado} ${p.seccion} · Apoderado: ${p.apoderado_nombre}`;
+      document.getElementById('modal-sub').textContent = `${p.codigo_estudiante} · ${p.grado} ${p.seccion} · Apoderado: ${p.apoderado_nombre}${p.telegram_chat_id ? ' · ✈ Telegram ' + p.telegram_chat_id : ''}`;
       body.textContent = '';
 
+      // 1. KPIs del estudiante
+      const presentes = (d.asistencia || []).filter((x) => x.estado === 'PRESENTE').length;
+      const tardanzas = (d.asistencia || []).filter((x) => x.estado === 'TARDANZA').length;
+      const faltas = (d.asistencia || []).filter((x) => x.estado === 'FALTA').length;
       const sg = document.createElement('div'); sg.className = 'signal-grid';
-      [['Asistencia (/40)', `${p.desglose.asistencia_pts} pts`], ['Notas (/30)', `${p.desglose.notas_pts} pts`], ['Convivencia (/20)', `${p.desglose.convivencia_pts} pts`], ['Biblioteca (/10)', `${p.desglose.biblioteca_pts} pts`]].forEach(([l, v]) => {
+      [
+        ['Promedio General', p.metricas.promedio_notas !== null ? `${p.metricas.promedio_notas.toFixed(1)} / 20` : '--'],
+        ['Índice de Riesgo', `${p.indice_riesgo}/100 (${p.nivel_semaforo})`],
+        ['Faltas / Tardanzas', `${p.metricas.faltas} faltas · ${p.metricas.tardanzas} tard.`],
+        ['Incidencias / Interv.', `${(d.incidencias || []).length} conv. · ${(d.intervenciones || []).length} tut.`],
+      ].forEach(([l, v]) => {
         const box = document.createElement('div'); box.className = 'signal-box';
         const sm = document.createElement('small'); sm.textContent = l;
-        const st = document.createElement('strong'); st.textContent = v;
+        const st = document.createElement('strong'); st.textContent = v; st.style.fontSize = '0.96rem';
         box.append(sm, st); sg.appendChild(box);
       });
       body.appendChild(sg);
 
+      // 2. Agrupar notas por curso y bimestre (para barras + boleta matricial)
+      const porCurso = new Map();
+      (d.notas || []).forEach((n) => {
+        if (!porCurso.has(n.curso)) porCurso.set(n.curso, { 1: null, 2: null, 3: null, 4: null });
+        const b = Number(n.bimestre);
+        if (b >= 1 && b <= 4 && porCurso.get(n.curso)[b] === null) porCurso.get(n.curso)[b] = Number(n.nota);
+      });
+      const cursosOrdenados = Array.from(porCurso.keys()).sort((x, y) => x.localeCompare(y, 'es'));
+      const cursosProm = cursosOrdenados.map((c) => {
+        const reg = porCurso.get(c);
+        const vals = [1, 2, 3, 4].map((b) => reg[b]).filter((v) => v !== null);
+        return { curso: c, reg, prom: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0 };
+      });
+
+      // 3. Gráficos: Barras (Notas) + Pastel (Asistencia)
+      const chartsGrid = document.createElement('div');
+      chartsGrid.style.display = 'grid';
+      chartsGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(290px, 1fr))';
+      chartsGrid.style.gap = '12px';
+      chartsGrid.append(
+        construirGraficoBarrasCursos(cursosProm),
+        construirGraficoPastelAsistencia(presentes, tardanzas, faltas)
+      );
+      body.appendChild(chartsGrid);
+
+      // 4. Desglose visual de riesgo (4 señales)
+      body.appendChild(construirGraficoRiesgo(p.desglose, p.indice_riesgo, p.nivel_semaforo));
+
+      // 5. Boleta Matricial de 4 Bimestres
+      if (cursosProm.length) {
+        const wrapBol = document.createElement('div');
+        const hBol = document.createElement('strong');
+        hBol.textContent = '📚 Boleta de Calificaciones (4 Bimestres)';
+        hBol.style.display = 'block'; hBol.style.marginBottom = '6px'; hBol.style.fontSize = '0.86rem';
+        const tw = document.createElement('div'); tw.className = 'table-wrap';
+        const tbl = document.createElement('table');
+        const thead = document.createElement('thead');
+        const trh = document.createElement('tr');
+        ['Curso', 'Bim. 1', 'Bim. 2', 'Bim. 3', 'Bim. 4', 'Promedio', 'MINEDU'].forEach((h) => {
+          const th = document.createElement('th'); th.textContent = h; trh.appendChild(th);
+        });
+        thead.appendChild(trh); tbl.appendChild(thead);
+        const tb = document.createElement('tbody');
+        cursosProm.forEach(({ curso, reg, prom }) => {
+          const tr = document.createElement('tr');
+          const tdC = document.createElement('td'); tdC.style.fontWeight = '600'; tdC.textContent = curso; tr.appendChild(tdC);
+          [1, 2, 3, 4].forEach((b) => {
+            const td = document.createElement('td');
+            td.textContent = reg[b] !== null ? reg[b].toFixed(1) : '—';
+            if (reg[b] !== null && reg[b] < 11) td.style.color = '#dc2626';
+            tr.appendChild(td);
+          });
+          const tdP = document.createElement('td');
+          const bp = document.createElement('span');
+          bp.className = `badge ${prom < 11 ? 'badge-ROJO' : (prom < 14 ? 'badge-AMBAR' : 'badge-VERDE')}`;
+          bp.textContent = prom.toFixed(1);
+          tdP.appendChild(bp); tr.appendChild(tdP);
+          const tdM = document.createElement('td');
+          tdM.textContent = prom >= 18 ? 'AD' : (prom >= 14 ? 'A' : (prom >= 11 ? 'B' : 'C'));
+          tdM.style.fontWeight = '700';
+          tr.appendChild(tdM);
+          tb.appendChild(tr);
+        });
+        tbl.appendChild(tb); tw.appendChild(tbl); wrapBol.append(hBol, tw);
+        body.appendChild(wrapBol);
+      }
+
+      // 6. Historiales detallados en 2 columnas
+      const detGrid = document.createElement('div');
+      detGrid.style.display = 'grid';
+      detGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(260px, 1fr))';
+      detGrid.style.gap = '12px';
+
       const addSec = (tit, items) => {
         const div = document.createElement('div');
-        const h = document.createElement('strong'); h.textContent = tit; h.style.display = 'block'; h.style.marginBottom = '6px';
+        div.style.background = '#f8fafc'; div.style.border = '1px solid #e2e8f0'; div.style.borderRadius = '10px'; div.style.padding = '12px';
+        const h = document.createElement('strong'); h.textContent = tit; h.style.display = 'block'; h.style.marginBottom = '6px'; h.style.fontSize = '0.82rem';
         div.appendChild(h);
         const ul = document.createElement('ul'); ul.className = 'detail-list';
         (items.length ? items : ['Sin registros recientes.']).forEach((t) => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
-        div.appendChild(ul); body.appendChild(div);
+        div.appendChild(ul); detGrid.appendChild(div);
       };
-      addSec('Notas recientes', d.notas.slice(0, 6).map((n) => `${n.curso} (Bim. ${n.bimestre}): ${n.nota}`));
-      addSec('Asistencia RFID', d.asistencia.map((a) => `${a.fecha}: ${a.estado} (${a.origen})`));
-      addSec('Convivencia', d.incidencias.map((i) => `[${i.gravedad}] ${i.tipo}: ${i.descripcion}`));
+      addSec('📅 Asistencia RFID reciente', (d.asistencia || []).slice(0, 6).map((a) => `${String(a.fecha).slice(0, 10)}: ${a.estado}${a.hora_rfid ? ' (' + String(a.hora_rfid).slice(0, 5) + ')' : ''}`));
+      addSec('🛡️ Convivencia Escolar', (d.incidencias || []).map((i) => `[${i.gravedad}] ${i.tipo}: ${i.descripcion}`));
+      addSec('📖 Biblioteca Escolar', (d.biblioteca || []).map((b) => `${String(b.fecha).slice(0, 10)} · ${b.accion}: ${b.libro}`));
+      addSec('📋 Intervenciones Tutoriales', (d.intervenciones || []).map((iv) => `[${iv.estado}] ${iv.motivo} → ${iv.accion_acordada}`));
+      body.appendChild(detGrid);
     }
 
     function abrirEditarEst(a) {
