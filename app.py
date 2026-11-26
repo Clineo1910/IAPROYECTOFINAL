@@ -984,9 +984,20 @@ def api_enviar_telegram(entrada: AlertaTelegramEntrada, request: Request):
 
     if token and chat_id_destino:
         try:
+            payload_tg = {
+                'chat_id': chat_id_destino,
+                'text': (
+                    f'🏫 SIGE-360 · Alerta al Apoderado\n\n'
+                    f'{texto}\n\n'
+                    f'👇 ¿Deseas consultar el historial de tu hijo/a o hacer una consulta? '
+                    f'Toca un botón o escríbeme directamente aquí.'
+                ),
+            }
+            if alumno_id_resuelto:
+                payload_tg['reply_markup'] = _botones_alumno_telegram(alumno_id_resuelto, incluir_ack=True)
             r = requests.post(
                 f'https://api.telegram.org/bot{token}/sendMessage',
-                json={'chat_id': chat_id_destino, 'text': f'🏫 SIGE-360 · Alerta al Apoderado\n\n{texto}'},
+                json=payload_tg,
                 timeout=10,
             )
             r.raise_for_status()
@@ -1011,11 +1022,150 @@ def api_enviar_telegram(entrada: AlertaTelegramEntrada, request: Request):
     return {'ok': True, 'enviado_telegram': enviado_externo, 'mensaje': detalle}
 
 
-# ==================== AUTO-VINCULACIÓN DE PADRES VÍA TELEGRAM BOT ====================
+# ==================== BOT INTERACTIVO DE TELEGRAM (VINCULACIÓN + HISTORIAL + SIGE-BOT) ====================
+def _botones_alumno_telegram(alumno_id: int, incluir_ack: bool = False):
+    filas = [
+        [
+            {'text': '📊 Ver historial y notas', 'callback_data': f'hist:{alumno_id}'},
+            {'text': '📅 Ver asistencia', 'callback_data': f'asis:{alumno_id}'},
+        ]
+    ]
+    if incluir_ack:
+        filas.append([{'text': '✅ Confirmar recibido', 'callback_data': f'ack:{alumno_id}'}])
+    return {'inline_keyboard': filas}
+
+
+def _buscar_alumno_por_chat_id(chat_id: str, alumno_id_preferido: int = None):
+    """Devuelve el estudiante autorizado para un chat_id (Ley N.° 29733: solo su hijo vinculado o chat demo)."""
+    chat_str = str(chat_id).strip()
+    demo_chat = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
+
+    if alumno_id_preferido:
+        filas = consultar(
+            "SELECT id, codigo_estudiante, nombre_completo, grado, seccion, telegram_chat_id FROM alumnos WHERE id = %s LIMIT 1",
+            (alumno_id_preferido,),
+        )
+        if filas:
+            al = filas[0]
+            tg_al = str(al.get('telegram_chat_id') or '').strip()
+            if tg_al == chat_str or (demo_chat and chat_str == demo_chat):
+                return al
+        return None
+
+    filas = consultar(
+        "SELECT id, codigo_estudiante, nombre_completo, grado, seccion FROM alumnos WHERE telegram_chat_id = %s ORDER BY id ASC LIMIT 1",
+        (chat_str,),
+    )
+    if filas:
+        return filas[0]
+
+    # Si es el chat demo (.env), usar el último estudiante sobre el que se envió alerta
+    if demo_chat and chat_str == demo_chat:
+        ult = consultar(
+            """SELECT a.id, a.codigo_estudiante, a.nombre_completo, a.grado, a.seccion
+               FROM alertas_enviadas alr
+               JOIN alumnos a ON a.id = alr.alumno_id
+               WHERE alr.alumno_id IS NOT NULL
+               ORDER BY alr.id DESC LIMIT 1"""
+        )
+        if ult:
+            return ult[0]
+    return None
+
+
+def _construir_resumen_historial_telegram(alumno_id: int) -> str:
+    al_filas = consultar(
+        "SELECT codigo_estudiante, nombre_completo, grado, seccion FROM alumnos WHERE id = %s LIMIT 1",
+        (alumno_id,),
+    )
+    if not al_filas:
+        return '⚠️ No se encontró el registro del estudiante.'
+    al = al_filas[0]
+    notas = consultar(
+        """SELECT curso,
+                  ROUND(AVG(nota)::numeric, 1) AS promedio,
+                  MAX(bimestre) AS ult_bim,
+                  COUNT(*) AS registros
+           FROM notas
+           WHERE alumno_id = %s
+           GROUP BY curso
+           ORDER BY promedio ASC, curso ASC""",
+        (alumno_id,),
+    )
+    if not notas:
+        return f"📘 {al['nombre_completo']} ({al['grado']} {al['seccion']})\nAún no registra calificaciones en el sistema."
+
+    prom_general = sum(float(n['promedio']) for n in notas) / len(notas)
+    lineas = [
+        f"📘 Historial Académico — {al['nombre_completo']}",
+        f"🎓 {al['grado']} {al['seccion']} · Código: {al['codigo_estudiante']}",
+        f"⭐ Promedio general: {prom_general:.1f} / 20\n",
+        "Resumen por curso:",
+    ]
+    for n in notas:
+        p = float(n['promedio'])
+        icono = '🔴' if p < 11 else ('🟡' if p < 14 else '🟢')
+        lineas.append(f"{icono} {n['curso']}: {p:.1f} (hasta Bim. {n['ult_bim']})")
+
+    lineas.append("\n💬 Puedes escribirme cualquier pregunta sobre el avance de tu hijo/a (ej. «¿en qué curso necesita refuerzo?»).")
+    lineas.append("🔒 Información confidencial solo para el apoderado (Ley N.° 29733).")
+    return '\n'.join(lineas)
+
+
+def _construir_resumen_asistencia_telegram(alumno_id: int) -> str:
+    al_filas = consultar(
+        "SELECT codigo_estudiante, nombre_completo, grado, seccion FROM alumnos WHERE id = %s LIMIT 1",
+        (alumno_id,),
+    )
+    if not al_filas:
+        return '⚠️ No se encontró el registro del estudiante.'
+    al = al_filas[0]
+    conteo = consultar(
+        """SELECT estado, COUNT(*) AS total
+           FROM asistencia WHERE alumno_id = %s
+           GROUP BY estado""",
+        (alumno_id,),
+    )
+    tot = {r['estado']: int(r['total']) for r in conteo}
+    recientes = consultar(
+        """SELECT fecha, estado, hora_rfid
+           FROM asistencia WHERE alumno_id = %s
+           ORDER BY fecha DESC LIMIT 8""",
+        (alumno_id,),
+    )
+    lineas = [
+        f"📅 Control de Asistencia RFID — {al['nombre_completo']}",
+        f"🎓 {al['grado']} {al['seccion']} · Código: {al['codigo_estudiante']}",
+        f"✅ Presentes: {tot.get('PRESENTE', 0)} · 🟡 Tardanzas: {tot.get('TARDANZA', 0)} · 🔴 Faltas: {tot.get('FALTA', 0)}\n",
+        "Últimos registros:",
+    ]
+    if not recientes:
+        lineas.append("Sin registros recientes.")
+    else:
+        for r in recientes:
+            est = r['estado']
+            ico = '✅' if est == 'PRESENTE' else ('🟡' if est == 'TARDANZA' else '🔴')
+            hora = f" ({r['hora_rfid']})" if r.get('hora_rfid') else ''
+            lineas.append(f"{ico} {r['fecha']} — {est}{hora}")
+
+    lineas.append("\n🔒 Información confidencial solo para el apoderado (Ley N.° 29733).")
+    return '\n'.join(lineas)
+
+
+def _enviar_tg(token: str, chat_id, texto: str, reply_markup=None):
+    payload = {'chat_id': chat_id, 'text': texto[:4000]}
+    if reply_markup:
+        payload['reply_markup'] = reply_markup
+    requests.post(
+        f'https://api.telegram.org/bot{token}/sendMessage',
+        json=payload,
+        timeout=10,
+    )
+
+
 def _bucle_vinculacion_telegram():
-    """Escucha mensajes a @SIGE360_Alertas_Bot para vincular padres por código de estudiante (ej. EST-2026-003)."""
+    """Escucha mensajes y botones en @SIGE360_Alertas_Bot: vinculación por código, historial/asistencia y consultas a SIGE-Bot."""
     offset = 0
-    # Descarta mensajes antiguos al arrancar
     load_dotenv(os.path.join(RAIZ, '.env'), override=True)
     token = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
     if not token:
@@ -1034,10 +1184,76 @@ def _bucle_vinculacion_telegram():
             resp = requests.get(
                 f'https://api.telegram.org/bot{token}/getUpdates',
                 params={'offset': offset, 'timeout': 5},
-                timeout=10,
+                timeout=12,
             ).json()
             for upd in resp.get('result', []):
                 offset = upd['update_id'] + 1
+
+                # 1. Botones interactivos (callback_query)
+                cb = upd.get('callback_query')
+                if cb:
+                    cb_id = cb.get('id')
+                    data = (cb.get('data') or '').strip()
+                    chat_id = (cb.get('message') or {}).get('chat', {}).get('id')
+                    try:
+                        requests.post(
+                            f'https://api.telegram.org/bot{token}/answerCallbackQuery',
+                            json={'callback_query_id': cb_id},
+                            timeout=6,
+                        )
+                    except Exception:
+                        pass
+                    if not chat_id or ':' not in data:
+                        continue
+                    accion, aid_str = data.split(':', 1)
+                    try:
+                        aid = int(aid_str)
+                    except ValueError:
+                        continue
+                    al = _buscar_alumno_por_chat_id(str(chat_id), alumno_id_preferido=aid)
+                    if not al:
+                        _enviar_tg(
+                            token,
+                            chat_id,
+                            '🔒 Por protección de datos (Ley N.° 29733), solo el apoderado vinculado puede consultar este historial.',
+                        )
+                        continue
+                    if accion == 'hist':
+                        _enviar_tg(
+                            token,
+                            chat_id,
+                            _construir_resumen_historial_telegram(al['id']),
+                            reply_markup=_botones_alumno_telegram(al['id']),
+                        )
+                    elif accion == 'asis':
+                        _enviar_tg(
+                            token,
+                            chat_id,
+                            _construir_resumen_asistencia_telegram(al['id']),
+                            reply_markup=_botones_alumno_telegram(al['id']),
+                        )
+                    elif accion == 'ack':
+                        try:
+                            with obtener_conexion() as conn:
+                                with conn.cursor() as cur:
+                                    cur.execute(
+                                        """INSERT INTO alertas_enviadas (alumno_id, canal, mensaje, enviado_externo, detalle_estado)
+                                           VALUES (%s, 'TELEGRAM_ACK', %s, TRUE, 'Confirmado por apoderado desde Telegram')""",
+                                        (al['id'], f"Apoderado (Telegram {chat_id}) confirmó lectura de alerta sobre {al['nombre_completo']}."),
+                                    )
+                                conn.commit()
+                        except Exception as exc:
+                            print('[TELEGRAM] Error guardando ACK:', exc)
+                        _enviar_tg(
+                            token,
+                            chat_id,
+                            f"✅ Confirmación registrada para {al['nombre_completo']}. El tutor ha sido notificado.\n\n"
+                            f"Si deseas revisar sus notas o asistencia ahora, usa los botones o escríbeme tu pregunta.",
+                            reply_markup=_botones_alumno_telegram(al['id']),
+                        )
+                    continue
+
+                # 2. Mensajes de texto del apoderado
                 msg = upd.get('message') or {}
                 chat_id = (msg.get('chat') or {}).get('id')
                 texto = (msg.get('text') or '').strip()
@@ -1064,23 +1280,97 @@ def _bucle_vinculacion_telegram():
                             f"✅ ¡Vinculación exitosa!\n"
                             f"Tu Telegram (ID {chat_id}) quedó asociado al estudiante:\n"
                             f"• {al['nombre_completo']} ({codigo} · {al['grado']} {al['seccion']})\n\n"
-                            f"Recibirás aquí las alertas tempranas de asistencia y rendimiento de SIGE-360."
+                            f"Recibirás aquí las alertas tempranas de SIGE-360 y puedes consultar su historial cuando quieras:"
+                        )
+                        _enviar_tg(token, chat_id, respuesta_bot, reply_markup=_botones_alumno_telegram(al['id']))
+                    else:
+                        _enviar_tg(
+                            token,
+                            chat_id,
+                            f"⚠️ No encontramos ningún estudiante con el código {codigo}. Verifica el código (ej. EST-2026-003).",
+                        )
+                    continue
+
+                # Si el padre ya está vinculado, permitir consultas directas de historial, asistencia o chat con SIGE-Bot
+                al_vinc = _buscar_alumno_por_chat_id(str(chat_id))
+                if al_vinc:
+                    t_low = ''.join(
+                        c for c in unicodedata.normalize('NFKD', texto.lower()) if not unicodedata.combining(c)
+                    ).strip()
+                    if t_low in ('/start', '/help', 'hola', 'menu', 'buenos dias', 'buenas tardes', 'buenas noches'):
+                        _enviar_tg(
+                            token,
+                            chat_id,
+                            f"🏫 Hola, soy SIGE-Bot (asistente de IA de SIGE-360).\n"
+                            f"Estudiante vinculado: {al_vinc['nombre_completo']} ({al_vinc['grado']} {al_vinc['seccion']}).\n\n"
+                            f"Toca un botón o escríbeme cualquier consulta sobre sus notas o asistencia:",
+                            reply_markup=_botones_alumno_telegram(al_vinc['id']),
+                        )
+                    elif t_low in ('si', 's', 'ok', 'claro', 'por favor', 'historial', 'notas', 'ver historial', 'quiero ver su historial', 'consultar historial') or 'historial' in t_low:
+                        _enviar_tg(
+                            token,
+                            chat_id,
+                            _construir_resumen_historial_telegram(al_vinc['id']),
+                            reply_markup=_botones_alumno_telegram(al_vinc['id']),
+                        )
+                    elif 'asistencia' in t_low or 'faltas' in t_low or 'tardanza' in t_low:
+                        _enviar_tg(
+                            token,
+                            chat_id,
+                            _construir_resumen_asistencia_telegram(al_vinc['id']),
+                            reply_markup=_botones_alumno_telegram(al_vinc['id']),
                         )
                     else:
-                        respuesta_bot = f"⚠️ No encontramos ningún estudiante con el código {codigo}. Verifica el código (ej. EST-2026-003)."
+                        # Consulta abierta al agente SIGE-Bot (n8n + MCP) con rol='padre'
+                        try:
+                            requests.post(
+                                f'https://api.telegram.org/bot{token}/sendChatAction',
+                                json={'chat_id': chat_id, 'action': 'typing'},
+                                timeout=5,
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            mensaje_agente = (
+                                f"(Apoderado autenticado vía Telegram, solo autorizado para su hijo "
+                                f"{al_vinc['nombre_completo']} ID {al_vinc['id']}) {texto}"
+                            )
+                            r_ia = requests.post(
+                                N8N_WEBHOOK_URL,
+                                json={'sesion': f'tg_{chat_id}', 'rol': 'padre', 'mensaje': mensaje_agente},
+                                timeout=45,
+                            )
+                            if r_ia.ok:
+                                resp_ia = (r_ia.json().get('respuesta') or '').strip()
+                            else:
+                                resp_ia = ''
+                        except Exception as exc:
+                            print('[TELEGRAM->N8N] Error:', exc)
+                            resp_ia = ''
+
+                        if resp_ia:
+                            _enviar_tg(
+                                token,
+                                chat_id,
+                                f"🤖 SIGE-Bot:\n\n{resp_ia}",
+                                reply_markup=_botones_alumno_telegram(al_vinc['id']),
+                            )
+                        else:
+                            _enviar_tg(
+                                token,
+                                chat_id,
+                                _construir_resumen_historial_telegram(al_vinc['id']),
+                                reply_markup=_botones_alumno_telegram(al_vinc['id']),
+                            )
                 else:
                     respuesta_bot = (
                         "🏫 Bienvenido a SIGE-360 Alertas.\n"
                         "Para vincular tu celular con tu hijo/a, envíame su código de estudiante (ejemplo: EST-2026-003).\n"
                         "Por protección de datos (Ley N.° 29733), usamos códigos escolares simulados y no DNIs reales."
                     )
-
-                requests.post(
-                    f'https://api.telegram.org/bot{token}/sendMessage',
-                    json={'chat_id': chat_id, 'text': respuesta_bot},
-                    timeout=8,
-                )
-        except Exception:
+                    _enviar_tg(token, chat_id, respuesta_bot)
+        except Exception as exc:
+            print('[TELEGRAM] Error en bucle polling:', exc)
             time.sleep(4)
         time.sleep(2)
 
