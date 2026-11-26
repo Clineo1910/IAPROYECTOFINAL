@@ -166,7 +166,7 @@ def listar_alumnos_en_riesgo(nivel: str = 'ROJO', rol_usuario: str = 'tutor') ->
             'autorizado': False,
             'mensaje': 'Por política de privacidad (PROT-10 / Ley 29733), un padre o apoderado no puede ver el listado global de alumnos en riesgo. Solo puede consultar el resumen de su propio hijo.',
         }
-    filas = consultar(f"{SQL_METRICAS} ORDER BY a.id ASC LIMIT 50")
+    filas = consultar(f"{SQL_METRICAS} ORDER BY a.id ASC LIMIT 120")
     evaluados = [evaluar_fila(f) for f in filas]
     evaluados.sort(key=lambda x: (-x['indice_riesgo'], x['alumno_id']))
     nivel_norm = nivel.upper().strip()

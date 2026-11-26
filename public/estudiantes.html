@@ -206,6 +206,12 @@
     document.getElementById('modal-ficha').addEventListener('click', (e) => { if (e.target.id === 'modal-ficha') e.target.hidden = true; });
 
     window.SIGE.iniciarLayout({ paginaActiva: 'estudiantes', titulo: 'Directorio de Estudiantes' }).then(async () => {
+      const params = new URLSearchParams(window.location.search);
+      const nivelParam = (params.get('nivel') || '').toUpperCase();
+      if (['TODOS', 'ROJO', 'AMBAR', 'VERDE'].includes(nivelParam)) {
+        filtroNivel = nivelParam;
+        document.querySelectorAll('.filter-pill').forEach((p) => p.classList.toggle('active', p.dataset.filter === filtroNivel));
+      }
       const r = await fetch('/api/dashboard');
       cache = (await r.json()).alumnos || [];
       render();

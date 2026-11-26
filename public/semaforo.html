@@ -16,7 +16,15 @@
       </div>
     </div>
     <div class="iot-clock-wrap">
-      <span class="iot-live"><span class="pulse-dot"></span> EN VIVO · AUTO-REFRESCO 4s</span>
+      <select id="iot-filtro-grado" class="rfid-select" aria-label="Filtrar pantalla por grado">
+        <option value="TODOS">Todos los grados</option>
+        <option value="1ro Secundaria">1ro Secundaria</option>
+        <option value="2do Secundaria">2do Secundaria</option>
+        <option value="3ro Secundaria">3ro Secundaria</option>
+        <option value="4to Secundaria">4to Secundaria</option>
+        <option value="5to Secundaria">5to Secundaria</option>
+      </select>
+      <span class="iot-live"><span class="pulse-dot"></span> EN VIVO · 4s</span>
       <div>
         <div id="iot-reloj" class="iot-clock">--:--:--</div>
         <small id="iot-fecha" style="color:#94a3b8;font-size:0.76rem;display:block;text-align:right;"></small>
@@ -29,23 +37,41 @@
     <span class="iot-pill">SEÑAL RFID → MOTOR PREDICTIVO</span>
   </div>
 
+  <!-- Resumen KPIs -->
   <section class="iot-summary">
     <div class="iot-kpi">
-      <span>ESTUDIANTES ACTIVOS</span>
+      <div>
+        <span>ESTUDIANTES MONITOREADOS</span>
+        <small id="iot-prom-inst" style="display:block;color:#64748b;font-size:0.75rem;margin-top:4px;">Índice prom: --</small>
+      </div>
       <strong id="iot-total">--</strong>
     </div>
     <div class="iot-kpi" style="border-left:4px solid #ef4444;">
-      <span style="color:#fca5a5;">ALERTA ROJA (≥ 60)</span>
+      <div>
+        <span style="color:#fca5a5;">ALERTA ROJA (≥ 60)</span>
+        <small style="display:block;color:#94a3b8;font-size:0.75rem;margin-top:4px;">Atención &lt; 24h</small>
+      </div>
       <strong id="iot-rojo" style="color:#f87171;">--</strong>
     </div>
     <div class="iot-kpi" style="border-left:4px solid #f59e0b;">
-      <span style="color:#fcd34d;">ALERTA ÁMBAR (30–59)</span>
+      <div>
+        <span style="color:#fcd34d;">ALERTA ÁMBAR (30–59)</span>
+        <small style="display:block;color:#94a3b8;font-size:0.75rem;margin-top:4px;">Seguimiento preventivo</small>
+      </div>
       <strong id="iot-ambar" style="color:#fbbf24;">--</strong>
     </div>
     <div class="iot-kpi" style="border-left:4px solid #22c55e;">
-      <span style="color:#86efac;">ESTADO VERDE (&lt; 30)</span>
+      <div>
+        <span style="color:#86efac;">ESTADO VERDE (&lt; 30)</span>
+        <small id="iot-pct-verde" style="display:block;color:#94a3b8;font-size:0.75rem;margin-top:4px;">-- % estable</small>
+      </div>
       <strong id="iot-verde" style="color:#4ade80;">--</strong>
     </div>
+  </section>
+
+  <!-- Barra de Resumen por Grado -->
+  <section style="padding:14px 28px 0;">
+    <div id="iot-grados-strip" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;"></div>
   </section>
 
   <main class="iot-board">
@@ -65,15 +91,25 @@
       <div id="lista-ambar" class="iot-cards"></div>
     </section>
 
-    <section class="iot-panel iot-panel-rfid">
-      <div class="iot-panel-head">
-        <h2>LECTURAS RFID · PUERTA DE INGRESO</h2>
-        <span class="iot-pill">LIVE FEED</span>
-      </div>
-      <div id="lista-rfid" class="rfid-list"></div>
-    </section>
+    <div style="display:flex;flex-direction:column;gap:18px;">
+      <section class="iot-panel iot-panel-rfid">
+        <div class="iot-panel-head">
+          <h2>LECTURAS RFID · PUERTA</h2>
+          <span class="iot-pill">LIVE FEED</span>
+        </div>
+        <div id="lista-rfid" class="rfid-list"></div>
+      </section>
+
+      <section class="iot-panel">
+        <div class="iot-panel-head">
+          <h2 style="color:#c4b5fd;">INTERVENCIONES EN CURSO</h2>
+          <span class="iot-pill">TUTORÍA</span>
+        </div>
+        <div id="lista-iot-intervenciones" class="rfid-list"></div>
+      </section>
+    </div>
   </main>
 
-  <script src="/semaforo.js"></script>
+  <script src="/semaforo.js?v=2"></script>
 </body>
 </html>

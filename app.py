@@ -333,7 +333,7 @@ def api_mcp_logs():
 def api_dashboard():
     # Accesible por Portal Docente y por la pantalla IoT de Sala de Profesores
     try:
-        filas = consultar(f"{SQL_METRICAS} ORDER BY a.id ASC LIMIT 50")
+        filas = consultar(f"{SQL_METRICAS} ORDER BY a.id ASC LIMIT 120")
         alumnos = [evaluar_fila(f) for f in filas]
         alumnos.sort(key=lambda x: (-x['indice_riesgo'], x['alumno_id']))
         resumen = {
