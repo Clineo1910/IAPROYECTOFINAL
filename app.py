@@ -4,6 +4,7 @@ import json
 import re
 import time
 import threading
+import unicodedata
 import uuid
 from datetime import datetime
 import requests
@@ -778,15 +779,18 @@ def api_enviar_telegram(entrada: AlertaTelegramEntrada, request: Request):
     chat_id_destino = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
     origen_destino = 'chat demo (.env)'
 
-    # Si no vino alumno_id explícito (ej. desde el botón del chat), detectar qué estudiante menciona el mensaje
+    # Si no vino alumno_id explícito (ej. desde el botón del chat), detectar qué estudiante menciona el mensaje (sin importar tildes)
+    def sin_tildes(s: str) -> str:
+        return ''.join(c for c in unicodedata.normalize('NFKD', s.lower()) if not unicodedata.combining(c))
+
     alumno_id_resuelto = entrada.alumno_id
     if not alumno_id_resuelto:
         todos_al = consultar("SELECT id, codigo_estudiante, nombre_completo FROM alumnos")
-        texto_low = texto.lower()
+        texto_norm = sin_tildes(texto)
         for al in todos_al:
-            partes = al['nombre_completo'].lower().split()
-            nombre_corto = ' '.join(partes[:2]) if len(partes) >= 2 else al['nombre_completo'].lower()
-            if al['codigo_estudiante'].lower() in texto_low or nombre_corto in texto_low:
+            partes = sin_tildes(al['nombre_completo']).split()
+            nombre_corto = ' '.join(partes[:2]) if len(partes) >= 2 else sin_tildes(al['nombre_completo'])
+            if sin_tildes(al['codigo_estudiante']) in texto_norm or nombre_corto in texto_norm:
                 alumno_id_resuelto = al['id']
                 break
 
@@ -928,6 +932,11 @@ def servir_pagina_docente(request: Request, archivo: str):
 @app.get('/')
 def ruta_inicio(request: Request):
     return servir_pagina_docente(request, 'index.html')
+
+
+@app.get('/estudiantes.html')
+def ruta_estudiantes(request: Request):
+    return servir_pagina_docente(request, 'estudiantes.html')
 
 
 @app.get('/notas.html')

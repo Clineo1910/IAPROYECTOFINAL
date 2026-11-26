@@ -151,6 +151,7 @@ window.SIGE = {
     if (sidebar) {
       const links = [
         ['panel', '/', 'Panel Predictivo'],
+        ['estudiantes', '/estudiantes.html', 'Directorio de Estudiantes'],
         ['notas', '/notas.html', 'Registro de Notas'],
         ['convivencia', '/convivencia.html', 'Convivencia Escolar'],
         ['biblioteca', '/biblioteca.html', 'Biblioteca Escolar'],

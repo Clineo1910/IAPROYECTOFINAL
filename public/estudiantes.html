@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGE-360 | Directorio de Estudiantes</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="sige-sidebar" class="sidebar"></aside>
+    <div class="main-area">
+      <header id="sige-topbar" class="topbar"></header>
+      <main class="workspace">
+        <section class="content-col">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Directorio General de Estudiantes</h2>
+                <p>Busca por nombre o código, filtra por grado o semáforo y consulta la Ficha 360° o el estado de Telegram de cada apoderado.</p>
+              </div>
+              <div class="toolbar">
+                <input id="buscar-est" class="search-input" type="search" placeholder="Buscar nombre o código...">
+                <select id="filtro-grado" class="search-input" style="width:155px;">
+                  <option value="TODOS">Todos los grados</option>
+                  <option value="1ro Secundaria">1ro Secundaria</option>
+                  <option value="2do Secundaria">2do Secundaria</option>
+                  <option value="3ro Secundaria">3ro Secundaria</option>
+                  <option value="4to Secundaria">4to Secundaria</option>
+                  <option value="5to Secundaria">5to Secundaria</option>
+                </select>
+                <button type="button" class="filter-pill active" data-filter="TODOS">Todos</button>
+                <button type="button" class="filter-pill" data-filter="ROJO">Rojo</button>
+                <button type="button" class="filter-pill" data-filter="AMBAR">Ámbar</button>
+                <button type="button" class="filter-pill" data-filter="VERDE">Verde</button>
+              </div>
+            </div>
+
+            <div id="toast-est" class="toast-ok" hidden></div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Estudiante</th>
+                    <th>Grado</th>
+                    <th>Apoderado / Telegram</th>
+                    <th>Prom.</th>
+                    <th>Faltas</th>
+                    <th>Riesgo</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tabla-estudiantes">
+                  <tr><td colspan="7" style="text-align:center;color:#64748b;">Cargando directorio...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        <aside id="sige-chat-panel" class="chat-panel"></aside>
+      </main>
+    </div>
+  </div>
+
+  <!-- MODAL FICHA 360° -->
+  <div id="modal-ficha" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-nombre">
+      <div class="modal-head">
+        <div>
+          <h2 id="modal-nombre" style="margin:0;font-size:1.05rem;">Ficha 360°</h2>
+          <small id="modal-sub" style="color:#64748b;"></small>
+        </div>
+        <button id="btn-cerrar-modal" class="btn btn-secondary" type="button">Cerrar</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/layout.js?v=3"></script>
+  <script>
+    let cache = [];
+    let filtroNivel = 'TODOS';
+    let filtroGrado = 'TODOS';
+    let filtroTexto = '';
+
+    function iniciales(n) {
+      return String(n || 'ES').split(' ').slice(0, 2).map((p) => p[0] || '').join('').toUpperCase();
+    }
+
+    function render() {
+      const tbody = document.getElementById('tabla-estudiantes');
+      tbody.textContent = '';
+      const q = filtroTexto.toLowerCase().trim();
+      const lista = cache.filter((a) => {
+        const okN = filtroNivel === 'TODOS' || a.nivel_semaforo === filtroNivel;
+        const okG = filtroGrado === 'TODOS' || a.grado === filtroGrado;
+        const okT = !q || a.nombre_completo.toLowerCase().includes(q) || a.codigo_estudiante.toLowerCase().includes(q);
+        return okN && okG && okT;
+      });
+
+      if (lista.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td'); td.colSpan = 7; td.style.textAlign = 'center'; td.style.color = '#64748b';
+        td.textContent = 'No se encontraron estudiantes con esos filtros.';
+        tr.appendChild(td); tbody.appendChild(tr); return;
+      }
+
+      lista.forEach((a) => {
+        const tr = document.createElement('tr');
+
+        // Estudiante
+        const tdE = document.createElement('td');
+        const cell = document.createElement('div'); cell.className = 'student-cell';
+        const av = document.createElement('span'); av.className = `avatar avatar-${a.nivel_semaforo}`; av.textContent = iniciales(a.nombre_completo);
+        const info = document.createElement('div');
+        const nom = document.createElement('span'); nom.className = 'student-name'; nom.textContent = a.nombre_completo;
+        const cod = document.createElement('span'); cod.className = 'student-code'; cod.textContent = `ID ${a.alumno_id} · ${a.codigo_estudiante}`;
+        info.append(nom, cod); cell.append(av, info); tdE.appendChild(cell);
+
+        const tdG = document.createElement('td'); tdG.textContent = `${a.grado} ${a.seccion}`;
+
+        // Apoderado + estado Telegram
+        const tdAp = document.createElement('td');
+        const apNom = document.createElement('div'); apNom.style.fontSize = '0.82rem'; apNom.style.fontWeight = '600'; apNom.textContent = a.apoderado_nombre;
+        const tgBadge = document.createElement('span');
+        tgBadge.className = a.telegram_chat_id ? 'badge badge-VERDE' : 'badge badge-GENERAL';
+        tgBadge.style.marginTop = '3px';
+        tgBadge.textContent = a.telegram_chat_id ? `✈ Telegram ID ${a.telegram_chat_id}` : 'Sin Telegram propio (usa demo)';
+        tdAp.append(apNom, tgBadge);
+
+        const tdP = document.createElement('td'); tdP.textContent = a.metricas.promedio_notas !== null ? a.metricas.promedio_notas.toFixed(1) : '-';
+        const tdF = document.createElement('td'); tdF.textContent = String(a.metricas.faltas);
+
+        const tdR = document.createElement('td');
+        const br = document.createElement('span'); br.className = `badge badge-${a.nivel_semaforo}`; br.textContent = `${a.indice_riesgo} (${a.nivel_semaforo})`;
+        tdR.appendChild(br);
+
+        const tdAcc = document.createElement('td');
+        tdAcc.style.display = 'flex'; tdAcc.style.gap = '6px'; tdAcc.style.flexWrap = 'wrap';
+        const bFicha = document.createElement('button'); bFicha.type = 'button'; bFicha.className = 'btn btn-secondary btn-xs'; bFicha.textContent = 'Ficha 360°';
+        bFicha.addEventListener('click', () => abrirFicha360(a.alumno_id));
+        const bTg = document.createElement('button'); bTg.type = 'button'; bTg.className = 'btn btn-primary btn-xs'; bTg.textContent = '✈ Alertar';
+        bTg.addEventListener('click', async () => {
+          const resp = await fetch('/api/alertas/telegram', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              alumno_id: a.alumno_id,
+              mensaje: `Estimado apoderado de ${a.nombre_completo} (${a.codigo_estudiante}, ${a.grado} ${a.seccion}): le informamos que su promedio actual es ${a.metricas.promedio_notas} con ${a.metricas.faltas} falta(s) y nivel ${a.nivel_semaforo}. Quedamos atentos para coordinar apoyo tutorial.`,
+            }),
+          });
+          const d = await resp.json();
+          window.SIGE.mostrarToast('toast-est', d.mensaje || 'Alerta enviada.');
+        });
+        tdAcc.append(bFicha, bTg);
+
+        tr.append(tdE, tdG, tdAp, tdP, tdF, tdR, tdAcc);
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function abrirFicha360(alumnoId) {
+      const modal = document.getElementById('modal-ficha');
+      const body = document.getElementById('modal-body');
+      modal.hidden = false; body.textContent = 'Cargando Ficha 360°...';
+      const r = await fetch(`/api/alumno/${alumnoId}`);
+      const d = await r.json();
+      if (!r.ok) { body.textContent = 'Error cargando ficha.'; return; }
+      const p = d.perfil;
+      document.getElementById('modal-nombre').textContent = `${p.nombre_completo} · ${p.nivel_semaforo} (${p.indice_riesgo}/100)`;
+      document.getElementById('modal-sub').textContent = `${p.codigo_estudiante} · ${p.grado} ${p.seccion} · Apoderado: ${p.apoderado_nombre}`;
+      body.textContent = '';
+
+      const sg = document.createElement('div'); sg.className = 'signal-grid';
+      [['Asistencia (/40)', `${p.desglose.asistencia_pts} pts`], ['Notas (/30)', `${p.desglose.notas_pts} pts`], ['Convivencia (/20)', `${p.desglose.convivencia_pts} pts`], ['Biblioteca (/10)', `${p.desglose.biblioteca_pts} pts`]].forEach(([l, v]) => {
+        const box = document.createElement('div'); box.className = 'signal-box';
+        const sm = document.createElement('small'); sm.textContent = l;
+        const st = document.createElement('strong'); st.textContent = v;
+        box.append(sm, st); sg.appendChild(box);
+      });
+      body.appendChild(sg);
+
+      const addSec = (tit, items) => {
+        const div = document.createElement('div');
+        const h = document.createElement('strong'); h.textContent = tit; h.style.display = 'block'; h.style.marginBottom = '6px';
+        div.appendChild(h);
+        const ul = document.createElement('ul'); ul.className = 'detail-list';
+        (items.length ? items : ['Sin registros recientes.']).forEach((t) => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+        div.appendChild(ul); body.appendChild(div);
+      };
+      addSec('Notas recientes', d.notas.slice(0, 6).map((n) => `${n.curso} (Bim. ${n.bimestre}): ${n.nota}`));
+      addSec('Asistencia RFID', d.asistencia.map((a) => `${a.fecha}: ${a.estado} (${a.origen})`));
+      addSec('Convivencia', d.incidencias.map((i) => `[${i.gravedad}] ${i.tipo}: ${i.descripcion}`));
+    }
+
+    document.getElementById('buscar-est').addEventListener('input', (e) => { filtroTexto = e.target.value; render(); });
+    document.getElementById('filtro-grado').addEventListener('change', (e) => { filtroGrado = e.target.value; render(); });
+    document.querySelectorAll('.filter-pill').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        filtroNivel = pill.dataset.filter;
+        document.querySelectorAll('.filter-pill').forEach((p) => p.classList.toggle('active', p === pill));
+        render();
+      });
+    });
+    document.getElementById('btn-cerrar-modal').addEventListener('click', () => { document.getElementById('modal-ficha').hidden = true; });
+    document.getElementById('modal-ficha').addEventListener('click', (e) => { if (e.target.id === 'modal-ficha') e.target.hidden = true; });
+
+    window.SIGE.iniciarLayout({ paginaActiva: 'estudiantes', titulo: 'Directorio de Estudiantes' }).then(async () => {
+      const r = await fetch('/api/dashboard');
+      cache = (await r.json()).alumnos || [];
+      render();
+    });
+  </script>
+</body>
+</html>
