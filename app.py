@@ -2,11 +2,13 @@
 import os
 import json
 import re
+import hmac
+import hashlib
+import secrets
 import time
 import threading
 import unicodedata
-import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -22,11 +24,39 @@ MCP_AUDIT_FILE = os.path.join(RAIZ, 'agente', 'mcp_audit.jsonl')
 
 N8N_WEBHOOK_URL = os.environ.get('N8N_WEBHOOK_URL', 'http://localhost:5678/webhook/agente')
 PORT = int(os.environ.get('PORT', '3060'))
-
-# Sesiones activas en memoria: sid -> dict(email, rol, nombre, cargo, alumno_id)
-SESIONES: dict[str, dict] = {}
+COOKIE_SECURE = os.environ.get('COOKIE_SECURE', 'false').lower() == 'true'
+IOT_DISPLAY_KEY = os.environ.get('IOT_DISPLAY_KEY', '').strip()
 
 app = FastAPI(title='SIGE-360')
+
+
+@app.middleware('http')
+async def cabeceras_seguridad(request: Request, call_next):
+    response = await call_next(request)
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'same-origin'
+    return response
+
+
+def hashear_password(pwd: str) -> str:
+    salt = secrets.token_bytes(16)
+    dk = hashlib.scrypt(pwd.encode('utf-8'), salt=salt, n=16384, r=8, p=1)
+    return f"scrypt${salt.hex()}${dk.hex()}"
+
+
+def verificar_password(pwd: str, almacenado: str) -> bool:
+    if not almacenado:
+        return False
+    if almacenado.startswith('scrypt$'):
+        partes = almacenado.split('$')
+        if len(partes) != 3:
+            return False
+        salt = bytes.fromhex(partes[1])
+        esperado = bytes.fromhex(partes[2])
+        actual = hashlib.scrypt(pwd.encode('utf-8'), salt=salt, n=16384, r=8, p=1)
+        return hmac.compare_digest(actual, esperado)
+    return hmac.compare_digest(pwd, almacenado)
 
 
 def obtener_conexion():
@@ -135,9 +165,31 @@ def evaluar_fila(m: dict) -> dict:
 
 def obtener_usuario_actual(request: Request) -> tuple[str | None, dict | None]:
     sid = request.cookies.get('sige360_sid')
-    if sid and sid in SESIONES:
-        return sid, SESIONES[sid]
+    if not sid:
+        return None, None
+    try:
+        filas = consultar(
+            """SELECT u.id, u.email, u.rol, u.nombre, u.cargo, u.alumno_id
+               FROM sesiones_activas s JOIN usuarios u ON u.id = s.usuario_id
+               WHERE s.sid = %s AND s.expira_en > CURRENT_TIMESTAMP
+               LIMIT 1""",
+            (sid,),
+        )
+        if filas:
+            return sid, filas[0]
+    except Exception:
+        pass
     return None, None
+
+
+def tiene_acceso_iot_o_tutor(request: Request) -> bool:
+    _, user = obtener_usuario_actual(request)
+    if user and user['rol'] == 'tutor':
+        return True
+    iot_key = (request.query_params.get('iot_key') or request.headers.get('X-IOT-Key') or '').strip()
+    if IOT_DISPLAY_KEY and iot_key and hmac.compare_digest(iot_key, IOT_DISPLAY_KEY):
+        return True
+    return False
 
 
 def exigir_tutor(request: Request):
@@ -219,7 +271,7 @@ class AlertaTelegramEntrada(BaseModel):
     mensaje: str
 
 
-# ==================== AUTENTICACIÓN (DESDE POSTGRESQL) ====================
+# ==================== AUTENTICACIÓN (SCRYPT + SESIONES PERSISTENTES EN POSTGRESQL) ====================
 @app.post('/api/login')
 def api_login(entrada: LoginEntrada, response: Response):
     email = entrada.email.strip().lower()
@@ -227,12 +279,22 @@ def api_login(entrada: LoginEntrada, response: Response):
         "SELECT id, email, password, rol, nombre, cargo, alumno_id FROM usuarios WHERE LOWER(email) = %s LIMIT 1",
         (email,),
     )
-    if not filas or filas[0]['password'] != entrada.password:
+    if not filas or not verificar_password(entrada.password, filas[0]['password']):
         return JSONResponse({'error': 'Correo o contraseña incorrectos.'}, status_code=401)
 
     cuenta = filas[0]
-    sid = uuid.uuid4().hex
-    SESIONES[sid] = {
+    sid = secrets.token_hex(32)
+    expira = datetime.now() + timedelta(hours=8)
+    with obtener_conexion() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM sesiones_activas WHERE expira_en <= CURRENT_TIMESTAMP")
+            cur.execute(
+                "INSERT INTO sesiones_activas (sid, usuario_id, expira_en) VALUES (%s, %s, %s)",
+                (sid, cuenta['id'], expira),
+            )
+        conn.commit()
+
+    usuario_pub = {
         'id': cuenta['id'],
         'email': cuenta['email'],
         'rol': cuenta['rol'],
@@ -240,16 +302,19 @@ def api_login(entrada: LoginEntrada, response: Response):
         'cargo': cuenta['cargo'],
         'alumno_id': cuenta['alumno_id'],
     }
-    response.set_cookie('sige360_sid', sid, httponly=True, max_age=28800, samesite='lax')
+    response.set_cookie('sige360_sid', sid, httponly=True, secure=COOKIE_SECURE, max_age=28800, samesite='lax')
     destino = '/padres.html' if cuenta['rol'] == 'padre' else '/'
-    return {'ok': True, 'usuario': SESIONES[sid], 'redirect': destino}
+    return {'ok': True, 'usuario': usuario_pub, 'redirect': destino}
 
 
 @app.post('/api/logout')
 def api_logout(request: Request, response: Response):
     sid = request.cookies.get('sige360_sid')
-    if sid and sid in SESIONES:
-        del SESIONES[sid]
+    if sid:
+        with obtener_conexion() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM sesiones_activas WHERE sid = %s", (sid,))
+            conn.commit()
     response.delete_cookie('sige360_sid')
     return {'ok': True, 'redirect': '/login.html'}
 
@@ -316,7 +381,10 @@ def api_mi_hijo(request: Request):
 
 # ==================== ENDPOINTS DOCENTES / IoT ====================
 @app.get('/api/mcp-logs')
-def api_mcp_logs():
+def api_mcp_logs(request: Request):
+    bloqueo = exigir_tutor(request)
+    if bloqueo:
+        return bloqueo
     if not os.path.exists(MCP_AUDIT_FILE):
         return {'logs': []}
     try:
@@ -330,8 +398,9 @@ def api_mcp_logs():
 
 
 @app.get('/api/dashboard')
-def api_dashboard():
-    # Accesible por Portal Docente y por la pantalla IoT de Sala de Profesores
+def api_dashboard(request: Request):
+    if not tiene_acceso_iot_o_tutor(request):
+        return JSONResponse({'error': 'Acceso restringido a personal docente o pantalla IoT autorizada.'}, status_code=403)
     try:
         filas = consultar(f"{SQL_METRICAS} ORDER BY a.id ASC LIMIT 120")
         alumnos = [evaluar_fila(f) for f in filas]
@@ -748,7 +817,7 @@ def api_crear_usuario(entrada: UsuarioNuevoEntrada, request: Request):
                 cur.execute(
                     """INSERT INTO usuarios (email, password, rol, nombre, cargo, alumno_id)
                        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id, email, rol, nombre, cargo""",
-                    (email, entrada.password, rol, entrada.nombre.strip(), cargo, entrada.alumno_id if rol == 'padre' else None),
+                    (email, hashear_password(entrada.password), rol, entrada.nombre.strip(), cargo, entrada.alumno_id if rol == 'padre' else None),
                 )
                 creado = dict(cur.fetchone())
                 if rol == 'padre' and entrada.alumno_id and entrada.telegram_chat_id and entrada.telegram_chat_id.strip():
@@ -967,6 +1036,13 @@ def ruta_usuarios(request: Request):
 @app.get('/protocolos.html')
 def ruta_protocolos(request: Request):
     return servir_pagina_docente(request, 'protocolos.html')
+
+
+@app.get('/semaforo.html')
+def ruta_semaforo(request: Request):
+    if not tiene_acceso_iot_o_tutor(request):
+        return RedirectResponse('/login.html', status_code=302)
+    return FileResponse(os.path.join(PUBLIC_DIR, 'semaforo.html'))
 
 
 @app.get('/padres.html')

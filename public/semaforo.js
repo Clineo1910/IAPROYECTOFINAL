@@ -11,7 +11,13 @@ function actualizarReloj() {
 
 async function refrescarSemaforo() {
   try {
-    const r = await fetch('/api/dashboard');
+    const iotKey = new URLSearchParams(window.location.search).get('iot_key');
+    const url = iotKey ? `/api/dashboard?iot_key=${encodeURIComponent(iotKey)}` : '/api/dashboard';
+    const r = await fetch(url);
+    if (r.status === 401 || r.status === 403) {
+      window.location.href = '/login.html';
+      return;
+    }
     const datos = await r.json();
     if (!r.ok) return;
 
